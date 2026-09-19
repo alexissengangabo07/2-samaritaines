@@ -5,8 +5,11 @@ const UniteQte = require('./UniteQte');
 const Product = require('./Product');
 const Approvisionnement = require('./Approvisionnement');
 const Vente = require('./Vente');
+const DetailVente = require('./DetailVente');
 const Inventaire = require('./Inventaire');
 const DetailInventaire = require('./DetailInventaire');
+const Sortie = require('./Sortie');
+const SortieItem = require('./SortieItem');
 const sequelize = require('../config/database');
 
 // Relations Product
@@ -26,12 +29,17 @@ Approvisionnement.belongsTo(Product, { foreignKey: 'id_produit' });
 User.hasMany(Approvisionnement, { foreignKey: 'id_utilisateur' });
 Approvisionnement.belongsTo(User, { foreignKey: 'id_utilisateur' });
 
-// Relations Vente
-Product.hasMany(Vente, { foreignKey: 'id_produit' });
-Vente.belongsTo(Product, { foreignKey: 'id_produit' });
+// Vente <-> DetailVente (Une vente a plusieurs détails)
+Vente.hasMany(DetailVente, { foreignKey: 'vente_id', as: 'items', onDelete: 'CASCADE' });
+DetailVente.belongsTo(Vente, { foreignKey: 'vente_id', as: 'vente' });
 
+// DetailVente <-> Product
+Product.hasMany(DetailVente, { foreignKey: 'produit_id' });
+DetailVente.belongsTo(Product, { foreignKey: 'produit_id', as: 'produit' });
+
+// Vente <-> User
 User.hasMany(Vente, { foreignKey: 'user_id' });
-Vente.belongsTo(User, { foreignKey: 'user_id' });
+Vente.belongsTo(User, { foreignKey: 'user_id', as: 'vendeur' });
 
 // Relations Inventaire <-> DetailInventaire
 Inventaire.hasMany(DetailInventaire, { foreignKey: 'inventaire_id', as: 'items', onDelete: 'CASCADE' });
@@ -45,4 +53,30 @@ DetailInventaire.belongsTo(Product, { foreignKey: 'produit_id', as: 'produit' })
 User.hasMany(Inventaire, { foreignKey: 'utilisateur_id' });
 Inventaire.belongsTo(User, { foreignKey: 'utilisateur_id', as: 'utilisateur' });
 
-module.exports = { User, Category, Fournisseur, UniteQte, Product, Approvisionnement, Vente, Inventaire, DetailInventaire, sequelize };
+// Relations Sortie <-> SortieItem
+Sortie.hasMany(SortieItem, { foreignKey: 'sortie_id', as: 'items', onDelete: 'CASCADE' });
+SortieItem.belongsTo(Sortie, { foreignKey: 'sortie_id', as: 'sortie' });
+
+// Relations SortieItem <-> Product
+Product.hasMany(SortieItem, { foreignKey: 'produit_id' });
+SortieItem.belongsTo(Product, { foreignKey: 'produit_id', as: 'produit' });
+
+// Relations Sortie <-> User
+User.hasMany(Sortie, { foreignKey: 'user_id' });
+Sortie.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+module.exports = { 
+  User, 
+  Category, 
+  Fournisseur, 
+  UniteQte, 
+  Product, 
+  Approvisionnement, 
+  Vente, 
+  Inventaire, 
+  DetailInventaire, 
+  DetailVente, 
+  Sortie, 
+  SortieItem, 
+  sequelize 
+};

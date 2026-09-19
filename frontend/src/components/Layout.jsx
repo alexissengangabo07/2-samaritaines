@@ -1,16 +1,17 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { 
-  LayoutDashboard, 
-  Pill, 
-  ShoppingCart, 
-  Truck, 
-  FolderTree, 
-  Users, 
-  LogOut, 
-  ShieldAlert,
+import {
+  LayoutDashboard,
+  Pill,
+  ShoppingCart,
+  Truck,
+  FolderTree,
+  Users,
+  LogOut,
+  FileSpreadsheet,
   Ruler,
-  ClipboardList
+  ClipboardList,
+  PackageMinus
 } from 'lucide-react';
 
 export default function Layout({ children }) {
@@ -26,8 +27,10 @@ export default function Layout({ children }) {
   const menuItems = [
     { label: 'Tableau de bord', path: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'pharmacien', 'assistant'] },
     { label: 'Caisse / Ventes', path: '/ventes', icon: ShoppingCart, roles: ['admin', 'pharmacien', 'assistant'] },
+    { label: 'Rapports Ventes', path: '/rapports-ventes', icon: FileSpreadsheet, roles: ['admin'] },
     { label: 'Médicaments', path: '/products', icon: Pill, roles: ['admin', 'pharmacien'] },
     { label: 'Approvisionnements', path: '/approvisionnements', icon: Truck, roles: ['admin', 'pharmacien'] },
+    { label: 'Sorties Internes', path: '/sorties', icon: PackageMinus, roles: ['admin', 'pharmacien'] },
     { label: 'Inventaire', path: '/inventaires', icon: ClipboardList, roles: ['admin'] },
     { label: 'Catégories', path: '/categories', icon: FolderTree, roles: ['admin', 'pharmacien'] },
     { label: 'Fournisseurs', path: '/fournisseurs', icon: Users, roles: ['admin', 'pharmacien'] },
@@ -69,11 +72,10 @@ export default function Layout({ children }) {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition-all duration-150 ${
-                    isActive
+                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition-all duration-150 ${isActive
                       ? 'bg-teal-50 text-teal-700 shadow-sm font-semibold'
                       : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                  }`}
+                    }`}
                 >
                   <Icon className={`w-4 h-4 ${isActive ? 'text-teal-600' : 'text-slate-400'}`} />
                   {item.label}

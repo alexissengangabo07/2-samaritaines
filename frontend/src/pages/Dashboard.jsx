@@ -11,7 +11,7 @@ export default function Dashboard() {
 
   // Calculs d'indicateurs
   const totalStock = products.reduce((acc, p) => acc + p.quantite, 0);
-  const lowStockProducts = products.filter(p => p.quantite <= 5);
+  const lowStockProducts = products.filter(p => p.quantite <= p.stock_alerte);
   const totalVentesCount = ventes.length;
 
   // Filtrage et comptage des ventes d'aujourd'hui

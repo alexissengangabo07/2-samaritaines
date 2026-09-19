@@ -8,8 +8,8 @@ const Vente = sequelize.define('Vente', {
     allowNull: true, // Ou false si obligatoire
     defaultValue: 'Client comptant'
   },
-  quantite: { type: DataTypes.INTEGER, allowNull: false },
-  dateVente: { type: DataTypes.DATEONLY, defaultValue: DataTypes.NOW }
+  total: { type: DataTypes.DOUBLE, allowNull: false },
+  dateVente: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
 }, { tableName: 'vente', timestamps: false });
 
 module.exports = Vente;

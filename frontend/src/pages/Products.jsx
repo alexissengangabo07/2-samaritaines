@@ -28,6 +28,7 @@ export default function Products() {
     description: '',
     prix_vente: '',
     quantite: '',
+    stock_alerte: '',
     dateExpiration: '',
     id_categorie: '',
     id_fournisseur: '',
@@ -84,6 +85,7 @@ export default function Products() {
       description: '',
       prix_vente: '',
       quantite: '',
+      stock_alerte: '',
       dateExpiration: '',
       id_categorie: '',
       id_fournisseur: '',
@@ -99,6 +101,7 @@ export default function Products() {
       description: '',
       prix_vente: '',
       quantite: '',
+      stock_alerte: '',
       dateExpiration: '',
       id_categorie: '',
       id_fournisseur: '',
@@ -127,6 +130,7 @@ export default function Products() {
       description: product.description || '',
       prix_vente: product.prix_vente !== undefined ? product.prix_vente : '',
       quantite: product.quantite !== undefined ? product.quantite : '',
+      stock_alerte: product.stock_alerte || 5,
       dateExpiration: formattedDate,
       id_categorie: product.categorie_id || product.Category?.id || '',
       id_fournisseur: product.fournisseur_id || product.Fournisseur?.id || '',
@@ -158,6 +162,7 @@ export default function Products() {
       description: formData.description ? formData.description.trim() : null,
       prix_vente: parseFloat(formData.prix_vente) || 0,
       quantite: parseInt(formData.quantite, 10) || 0,
+      stock_alerte: parseInt(formData.stock_alerte, 10),
       dateExpiration: formData.dateExpiration || null,
       categorie_id: formData.id_categorie ? parseInt(formData.id_categorie, 10) : null,
       fournisseur_id: formData.id_fournisseur ? parseInt(formData.id_fournisseur, 10) : null,
@@ -185,7 +190,7 @@ export default function Products() {
     if (!matchesSearch) return false;
 
     if (activeTab === 'low_stock') {
-      return p.quantite <= 5;
+      return p.quantite <= p.stock_alerte;
     }
 
     if (activeTab === 'expiring') {
@@ -211,7 +216,7 @@ export default function Products() {
     setCurrentPage(1);
   };
 
-  const lowStockCount = products.filter(p => p.quantite <= 5).length;
+  const lowStockCount = products.filter(p => p.quantite <= p.stock_alerte).length;
   const expiringCount = products.filter(p => isExpiringSoon(p.dateExpiration)).length;
   const isSubmitting = createProductMutation.isLoading || updateProductMutation.isLoading;
 
@@ -238,8 +243,8 @@ export default function Products() {
         <button
           onClick={() => handleTabChange('all')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'all'
-              ? 'bg-slate-900 text-white shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100'
+            ? 'bg-slate-900 text-white shadow-sm'
+            : 'text-slate-600 hover:bg-slate-100'
             }`}
         >
           Tous les médicaments
@@ -251,8 +256,8 @@ export default function Products() {
         <button
           onClick={() => handleTabChange('expiring')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'expiring'
-              ? 'bg-rose-600 text-white shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100'
+            ? 'bg-rose-600 text-white shadow-sm'
+            : 'text-slate-600 hover:bg-slate-100'
             }`}
         >
           <Calendar className="w-4 h-4" />
@@ -267,8 +272,8 @@ export default function Products() {
         <button
           onClick={() => handleTabChange('low_stock')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'low_stock'
-              ? 'bg-amber-500 text-white shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100'
+            ? 'bg-amber-500 text-white shadow-sm'
+            : 'text-slate-600 hover:bg-slate-100'
             }`}
         >
           <Flame className="w-4 h-4" />
@@ -322,7 +327,7 @@ export default function Products() {
                   </tr>
                 ) : (
                   paginatedProducts.map((product) => {
-                    const isLowStock = product.quantite <= 5;
+                    const isLowStock = product.quantite <= product.stock_alerte;
                     const isExpiring = isExpiringSoon(product.dateExpiration);
 
                     return (
@@ -346,8 +351,8 @@ export default function Products() {
                         </td>
                         <td className="py-4 px-6">
                           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${isLowStock
-                              ? 'bg-amber-50 text-amber-700 border-amber-200'
-                              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            ? 'bg-amber-50 text-amber-700 border-amber-200'
+                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                             }`}>
                             {isLowStock ? <AlertTriangle className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />}
                             {product.quantite}
@@ -482,12 +487,12 @@ export default function Products() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Quantité *
+                    Stock d'alerte *
                   </label>
                   <input
                     type="number"
-                    name="quantite"
-                    value={formData.quantite}
+                    name="stock_alerte"
+                    value={formData.stock_alerte}
                     onChange={handleChange}
                     placeholder="ex: 100"
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
@@ -498,7 +503,7 @@ export default function Products() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Date d'expiration
+                  Date d'expiration *
                 </label>
                 <input
                   type="date"
@@ -506,19 +511,21 @@ export default function Products() {
                   value={formData.dateExpiration}
                   onChange={handleChange}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                  required
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Catégorie
+                    Catégorie *
                   </label>
                   <select
                     name="id_categorie"
                     value={formData.id_categorie}
                     onChange={handleChange}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                    required
                   >
                     <option value="">-- Sélectionner --</option>
                     {categories.map(c => (
@@ -529,13 +536,14 @@ export default function Products() {
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Fournisseur
+                    Fournisseur *
                   </label>
                   <select
                     name="id_fournisseur"
                     value={formData.id_fournisseur}
                     onChange={handleChange}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                    required
                   >
                     <option value="">-- Sélectionner --</option>
                     {fournisseurs.map(f => (
@@ -547,13 +555,14 @@ export default function Products() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Unité de mesure
+                  Unité de mesure *
                 </label>
                 <select
                   name="id_unite"
                   value={formData.id_unite}
                   onChange={handleChange}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                  required
                 >
                   <option value="">-- Sélectionner l'unité --</option>
                   {unites.map(u => (

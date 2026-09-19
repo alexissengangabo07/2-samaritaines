@@ -9,6 +9,7 @@ const categoryRoutes = require('./category.routes');
 const fournisseurRoutes = require('./fournisseur.routes');
 const uniteRoutes = require('./uniteQte.routes');
 const inventaireRoutes = require('./inventaire.routes');
+const sortieRoutes = require('./sortie.routes');
 
 router.use('/users', userRoutes);
 router.use('/products', productRoutes);
@@ -18,5 +19,6 @@ router.use('/categories', categoryRoutes);
 router.use('/fournisseurs', fournisseurRoutes);
 router.use('/unites', uniteRoutes);
 router.use('/inventaires', inventaireRoutes);
+router.use('/api/sorties', sortieRoutes);
 
 module.exports = router;

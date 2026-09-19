@@ -35,8 +35,9 @@ exports.getProductById = async (req, res) => {
 // CREATE: Ajouter un nouveau produit
 exports.createProduct = async (req, res) => {
   try {
-    const { nom, prix_vente, quantite, description, dateExpiration, id_unite, categorie_id, fournisseur_id } = req.body;
-console.log(req.body)
+    console.log(req.body);
+    const { nom, prix_vente, quantite, stock_alerte, description, dateExpiration, id_unite, categorie_id, fournisseur_id } = req.body;
+
     // Vérification explicite (optionnelle mais plus propre)
     const existingProduct = await Product.findOne({ where: { nom } });
     if (existingProduct) {
@@ -46,6 +47,7 @@ console.log(req.body)
       nom,
       prix_vente,
       quantite: quantite || 0,
+      stock_alerte,
       description,
       dateExpiration,
       id_unite,
@@ -56,6 +58,7 @@ console.log(req.body)
     res.status(201).json({ message: "Produit créé avec succès", product: newProduct });
   } catch (error) {
     res.status(400).json({ message: "Erreur lors de la création du produit", error: error.message });
+    console.log(error.message)
   }
 };
 
@@ -64,8 +67,6 @@ exports.updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
     const [updated] = await Product.update(req.body, { where: { id } });
-
-    console.log(req.body)
 
     if (!updated) return res.status(404).json({ message: "Produit non trouvé" });
 
