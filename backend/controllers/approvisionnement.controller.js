@@ -37,6 +37,18 @@ exports.createApprovisionnement = async (req, res) => {
     // Augmenter le stock du produit
     await product.increment('quantite', { by: quantite });
 
+    // 2. Mettre à jour le prix d'achat et augmenter le stock
+    const updateData = {};
+    if (prix_achat !== undefined && prix_achat !== null) {
+      updateData.prix_achat = prix_achat;
+    }
+
+    // Mise à jour simultanée de la quantité et du prix d'achat
+    await product.increment('quantite', { by: quantite });
+    if (Object.keys(updateData).length > 0) {
+      await product.update(updateData);
+    }
+
     res.status(201).json({ message: "Stock réapprovisionné avec succès", approvisionnement: newAppro });
   } catch (error) {
     res.status(400).json({ message: "Erreur lors du réapprovisionnement", error: error.message });

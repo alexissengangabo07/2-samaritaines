@@ -91,7 +91,7 @@ exports.createSortie = async (req, res) => {
         {
           model: SortieItem,
           as: 'items',
-          include: [{ model: Product, as: 'produit', attributes: ['id', 'nom', 'code_barre'] }]
+          include: [{ model: Product, as: 'produit', attributes: ['id', 'nom'] }]
         },
         {
           model: User,
@@ -130,7 +130,7 @@ exports.getAllSorties = async (req, res) => {
         {
           model: SortieItem,
           as: 'items',
-          include: [{ model: Product, as: 'produit', attributes: ['id', 'nom', 'code_barre', 'prix_vente'] }]
+          include: [{ model: Product, as: 'produit', attributes: ['id', 'nom', 'prix_vente'] }]
         },
         {
           model: User,

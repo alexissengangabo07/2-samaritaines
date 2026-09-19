@@ -19,6 +19,6 @@ router.use('/categories', categoryRoutes);
 router.use('/fournisseurs', fournisseurRoutes);
 router.use('/unites', uniteRoutes);
 router.use('/inventaires', inventaireRoutes);
-router.use('/api/sorties', sortieRoutes);
+router.use('/sorties', sortieRoutes);
 
 module.exports = router;

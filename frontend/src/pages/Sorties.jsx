@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from '../api/axios'; // Votre instance configurée d'axios
+import { getSorties, createSortie, deleteSortie } from '../api/sortie.api';
+import { getProducts } from '../api/product.api'; // Ajustez le chemin selon votre structure
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
 import { 
@@ -25,34 +26,75 @@ export default function Sorties() {
   const [serviceBeneficiaire, setServiceBeneficiaire] = useState('');
   const [motif, setMotif] = useState('');
   const [cartItems, setCartItems] = useState([]);
-  const [message, setMessage] = useState({ type: '', text: '' });
+  const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
 
   // Recherche & Pagination
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
 
-  // Requête Produits
-  const { data: products = [] } = useQuery({
+  // 1. Chargement des données (Syntaxes nettoyées basées sur votre exemple)
+  const { data: productsData = [], isLoading: isLoadingProducts } = useQuery({
     queryKey: ['products'],
-    queryFn: async () => {
-      const res = await axios.get('/produits');
-      return res.data.data || res.data || [];
-    }
+    queryFn: async () => (await getProducts()).data
   });
 
-  // Requête Sorties
-  const { data: sortiesData = [] } = useQuery({
+  const { data: sortiesData = [], isLoading: isLoadingSorties } = useQuery({
     queryKey: ['sorties'],
-    queryFn: async () => {
-      const res = await axios.get('/sorties');
-      return Array.isArray(res.data) ? res.data : (res.data?.data || []);
-    }
+    queryFn: async () => (await getSorties()).data
   });
+
+  // Normalisation des tableaux
+  const products = useMemo(() => {
+    if (Array.isArray(productsData)) return productsData;
+    return productsData.data || [];
+  }, [productsData]);
+
+  const sorties = useMemo(() => {
+    if (Array.isArray(sortiesData)) return sortiesData;
+    return sortiesData.data || [];
+  }, [sortiesData]);
 
   const selectedProduct = products.find(p => p.id === parseInt(selectedProductId, 10));
 
-  // Ajout d'un produit au panier de sortie
+  // 2. Mutations (Syntaxe basée sur votre exemple)
+  const createSortieMutation = useMutation({
+    mutationFn: createSortie,
+    onSuccess: () => {
+      queryClient.invalidateQueries(['sorties']);
+      queryClient.invalidateQueries(['products']);
+      setSuccessMsg('Sortie de stock enregistrée avec succès !');
+      setErrorMsg('');
+
+      // Réinitialisation du panier et formulaire
+      setCartItems([]);
+      setServiceBeneficiaire('');
+      setMotif('');
+      setSelectedProductId('');
+      setQuantite(1);
+    },
+    onError: (err) => {
+      setErrorMsg(err.response?.data?.message || 'Erreur lors de l\'enregistrement de la sortie');
+      setSuccessMsg('');
+    }
+  });
+
+  const deleteSortieMutation = useMutation({
+    mutationFn: (id) => deleteSortie(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['sorties']);
+      queryClient.invalidateQueries(['products']);
+      setSuccessMsg('Sortie supprimée et stock restitué avec succès.');
+      setErrorMsg('');
+    },
+    onError: (err) => {
+      setErrorMsg(err.response?.data?.message || 'Erreur lors de la suppression de la sortie');
+      setSuccessMsg('');
+    }
+  });
+
+  // Gestion du panier
   const handleAddToCart = () => {
     if (!selectedProduct) return;
     const qty = parseInt(quantite, 10);
@@ -63,7 +105,8 @@ export default function Sorties() {
     const availableStock = selectedProduct.quantite - currentQtyInCart;
 
     if (qty > availableStock) {
-      setMessage({ type: 'error', text: `Stock insuffisant. ${availableStock} unités disponibles.` });
+      setErrorMsg(`Stock insuffisant pour "${selectedProduct.nom}". ${availableStock} unités disponibles.`);
+      setSuccessMsg('');
       return;
     }
 
@@ -83,66 +126,52 @@ export default function Sorties() {
 
     setSelectedProductId('');
     setQuantite(1);
-    setMessage({ type: '', text: '' });
+    setErrorMsg('');
   };
 
   const handleRemoveFromCart = (productId) => {
     setCartItems(cartItems.filter(item => item.id_produit !== productId));
   };
 
-  // Mutation de validation de la sortie
-  const sortieMutation = useMutation({
-    mutationFn: async (payload) => {
-      const res = await axios.post('/sorties', payload);
-      return res.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries(['products']);
-      queryClient.invalidateQueries(['sorties']);
-      setMessage({ type: 'success', text: 'Sortie de stock enregistrée avec succès !' });
-
-      setCartItems([]);
-      setServiceBeneficiaire('');
-      setMotif('');
-      setSelectedProductId('');
-      setQuantite(1);
-    },
-    onError: (err) => {
-      setMessage({ type: 'error', text: err.response?.data?.message || 'Erreur lors de la sortie de stock' });
-    }
-  });
-
   const handleSubmit = (e) => {
     e.preventDefault();
     if (cartItems.length === 0) {
-      setMessage({ type: 'error', text: 'Veuillez ajouter au moins un produit.' });
+      setErrorMsg('Veuillez ajouter au moins un produit.');
       return;
     }
     if (!serviceBeneficiaire.trim()) {
-      setMessage({ type: 'error', text: 'Veuillez spécifier le service bénéficiaire.' });
+      setErrorMsg('Veuillez spécifier le service bénéficiaire.');
       return;
     }
 
-    sortieMutation.mutate({
+    const payload = {
+      service_beneficiaire: serviceBeneficiaire.trim(),
+      motif: motif.trim(),
+      user_id: user?.id,
       items: cartItems.map(item => ({
         id_produit: item.id_produit,
         quantite: item.quantite
-      })),
-      service_beneficiaire: serviceBeneficiaire.trim(),
-      motif: motif.trim(),
-      user_id: user?.id
-    });
+      }))
+    };
+
+    createSortieMutation.mutate(payload);
   };
 
-  // Extraction à plat des lignes de sorties pour la table
+  const handleDelete = (id) => {
+    if (window.confirm('Voulez-vous vraiment annuler cette sortie de stock ?')) {
+      deleteSortieMutation.mutate(id);
+    }
+  };
+
+  // Traitement à plat des éléments de sortie pour le tableau d'historique
   const flatRows = useMemo(() => {
     const rows = [];
-    sortiesData.forEach(sortie => {
+    sorties.forEach(sortie => {
       if (sortie.items && sortie.items.length > 0) {
         sortie.items.forEach(item => {
           rows.push({
             id: sortie.id,
-            nom_produit: item.produit?.nom || 'Inconnu',
+            nom_produit: item.produit?.nom || 'Produit inconnu',
             quantite: item.quantite,
             service_beneficiaire: sortie.service_beneficiaire,
             motif: sortie.motif || '-',
@@ -153,9 +182,9 @@ export default function Sorties() {
       }
     });
     return rows;
-  }, [sortiesData]);
+  }, [sorties]);
 
-  // Filtre de recherche
+  // Filtrage par recherche
   const filteredRows = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
     return flatRows.filter(row =>
@@ -177,7 +206,7 @@ export default function Sorties() {
           <PackageMinus className="w-7 h-7 text-amber-600" /> Sortie Interne de Stock
         </h1>
         <p className="text-sm text-slate-500">
-          Enregistrez les retraits de produits distribués aux services internes (Urgences, Pédiatrie, etc.)
+          Enregistrez les retraits de produits distribués aux services internes
         </p>
       </div>
 
@@ -189,14 +218,17 @@ export default function Sorties() {
               <ArrowUpRight className="w-5 h-5 text-amber-600" /> Formulaire de Sortie
             </h2>
 
-            {message.text && (
-              <div className={`p-3 rounded-xl mb-4 text-xs font-semibold flex items-center gap-2 ${
-                message.type === 'success' 
-                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                  : 'bg-rose-50 text-rose-700 border border-rose-200'
-              }`}>
-                {message.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
-                {message.text}
+            {errorMsg && (
+              <div className="p-3 rounded-xl mb-4 text-xs font-semibold flex items-center gap-2 bg-rose-50 text-rose-700 border border-rose-200">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                {errorMsg}
+              </div>
+            )}
+
+            {successMsg && (
+              <div className="p-3 rounded-xl mb-4 text-xs font-semibold flex items-center gap-2 bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                {successMsg}
               </div>
             )}
 
@@ -207,6 +239,7 @@ export default function Sorties() {
                   value={selectedProductId}
                   onChange={(e) => setSelectedProductId(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
+                  disabled={isLoadingProducts}
                 >
                   <option value="">-- Sélectionner --</option>
                   {products.map((p) => {
@@ -278,7 +311,7 @@ export default function Sorties() {
                 <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Service Destinataire *</label>
                 <input
                   type="text"
-                  placeholder="Ex: Pédiatrie, Bloc Opératoire, Maternité"
+                  placeholder="Ex: Pédiatrie, Bloc Opératoire"
                   value={serviceBeneficiaire}
                   onChange={(e) => setServiceBeneficiaire(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
@@ -299,10 +332,10 @@ export default function Sorties() {
 
               <button
                 type="submit"
-                disabled={sortieMutation.isLoading || cartItems.length === 0}
+                disabled={createSortieMutation.isLoading || cartItems.length === 0}
                 className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold py-2.5 rounded-xl shadow-md transition-all text-xs disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
               >
-                {sortieMutation.isLoading ? 'Enregistrement...' : 'Valider Le Bon De Sortie'}
+                {createSortieMutation.isLoading ? 'Enregistrement...' : 'Valider la sortie de stock'}
               </button>
             </form>
           </div>
@@ -336,12 +369,19 @@ export default function Sorties() {
                     <th className="py-3 px-6">Motif</th>
                     <th className="py-3 px-6">Enregistré par</th>
                     <th className="py-3 px-6">Date</th>
+                    {/* <th className="py-3 px-6 text-center">Actions</th> */}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-sm">
-                  {currentRows.length === 0 ? (
+                  {isLoadingSorties ? (
                     <tr>
-                      <td colSpan="6" className="py-8 text-center text-slate-400 text-sm">
+                      <td colSpan="7" className="py-8 text-center text-slate-400 text-sm">
+                        Chargement des sorties...
+                      </td>
+                    </tr>
+                  ) : currentRows.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" className="py-8 text-center text-slate-400 text-sm">
                         Aucune sortie interne enregistrée.
                       </td>
                     </tr>
@@ -361,6 +401,15 @@ export default function Sorties() {
                               : 'N/A'
                             }
                           </td>
+                          {/* <td className="py-3.5 px-6 text-center">
+                            <button
+                              onClick={() => handleDelete(row.id)}
+                              className="text-rose-500 hover:text-rose-700 p-1.5 rounded-lg hover:bg-rose-50 transition-colors"
+                              title="Annuler la sortie"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td> */}
                         </tr>
                       );
                     })
