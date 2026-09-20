@@ -11,6 +11,7 @@ import PrivateRoute from './components/PrivateRoute';
 import Inventaires from './pages/Inventaires';
 import RapportVentes from './pages/RapportVentes';
 import Sorties from './pages/Sorties';
+import Users from './pages/Users';
 
 function App() {
   return (
@@ -33,6 +34,7 @@ function App() {
         <Route path="/categories" element={<Categories />} />
         <Route path="/unites" element={<Unites />} />
         <Route path="/rapports-ventes" element={<RapportVentes />} />
+        <Route path="/utilisateurs" element={<Users />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

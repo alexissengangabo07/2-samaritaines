@@ -35,6 +35,8 @@ export default function Layout({ children }) {
     { label: 'Catégories', path: '/categories', icon: FolderTree, roles: ['admin', 'pharmacien'] },
     { label: 'Fournisseurs', path: '/fournisseurs', icon: Users, roles: ['admin', 'pharmacien'] },
     { label: 'Unités', path: '/unites', icon: Ruler, roles: ['admin', 'pharmacien'] },
+    // Conditionnel : Visible SEULEMENT par l'Administrateur
+    ...(user?.role === 'admin' ? [{ label: 'Utilisateurs', path: '/utilisateurs', icon: Users, roles: ['admin'] }] : [])
   ];
 
   const roleColors = {
