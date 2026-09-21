@@ -15,7 +15,7 @@ const PORT = process.env.PORT || 5000;
 
 // 1. CORS: Autorise les requêtes provenant de votre application React
 app.use(cors({
-  origin: [process.env.CLIENT_URL, 'http://localhost:5173', 'http://10.169.171.92:5173', 'http://localhost:4173', 'http://192.168.0.100:5173', 'http://192.168.0.100:4173'], // URL par défaut de Vite / React
+  origin: [process.env.CLIENT_URL, 'http://localhost:5173', 'http://10.169.171.92:4173','http://10.169.171.92:5173', 'http://localhost:4173', 'http://192.168.0.100:5173', 'http://192.168.0.100:4173'], // URL par défaut de Vite / React
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));

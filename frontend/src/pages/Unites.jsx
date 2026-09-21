@@ -123,7 +123,7 @@ export default function Unites() {
                       <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
                         <Tag className="w-4 h-4" />
                       </div>
-                      <span>{unite.label}</span>
+                      <span className='capitalize'>{unite.label}</span>
                     </td>
                     <td className="py-4 px-6 text-slate-500">
                       {unite.description || <span className="text-slate-300 italic">Aucune description</span>}
