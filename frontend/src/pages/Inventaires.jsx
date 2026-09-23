@@ -5,6 +5,7 @@ import { getProducts } from '../api/product.api';
 import Layout from '../components/Layout';
 import { ClipboardList, Plus, Search, Eye, CheckCircle2, X, ChevronLeft, ChevronRight, Printer } from 'lucide-react';
 import { jwtDecode } from 'jwt-decode';
+import Entete from "../assets/entete.png";
 
 export default function Inventaires() {
     const queryClient = useQueryClient();
@@ -145,6 +146,7 @@ export default function Inventaires() {
                 </style>
             </head>
             <body>
+                <img src="${Entete}" alt="entete" />
                 <h1>Détail de l'Inventaire : ${detailInventaire.reference}</h1>
                 <p>Effectué le ${dateStr} par ${detailInventaire.utilisateur?.name || 'Admin'}</p>
                 <table>

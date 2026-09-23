@@ -1,4 +1,5 @@
 import React, { forwardRef } from 'react';
+import Entete from '../assets/entete.png';
 
 export const Receipt = forwardRef(({ saleData }, ref) => {
   if (!saleData) return null;
@@ -32,7 +33,7 @@ export const Receipt = forwardRef(({ saleData }, ref) => {
     <div ref={ref} className="p-8 text-slate-800 text-sm font-sans max-w-xs mx-auto print:p-4 print:w-full">
       {/* En-tête de la Pharmacie / Clinique */}
       <div className="text-center border-b pb-4 mb-4 border-dashed border-slate-300">
-        <h2 className="text-lg font-bold uppercase tracking-wider">CLINIQUE 3 SAMARITAINES</h2>
+        <img src={Entete} alt='entete' />
         <p className="text-xs text-slate-500">Facture / Reçu de Caisse</p>
         <p className="text-xs text-slate-500 mt-1">{formattedDate}</p>
       </div>
@@ -41,7 +42,7 @@ export const Receipt = forwardRef(({ saleData }, ref) => {
       <div className="mb-4 text-xs space-y-1">
         <p><span className="font-semibold">N° facture :</span> #{saleData.id || 'N/A'}</p>
         <p><span className="font-semibold">Client :</span> <span className="capitalize">{customerName}</span></p>
-        <p><span className="font-semibold">Servi par :</span> <span className="capitalize">{sellerName}</span></p>
+        {/* <p><span className="font-semibold">Servi par :</span> <span className="capitalize">{sellerName}</span></p> */}
         {saleData.paymentMethod && (
           <p><span className="font-semibold">Paiement :</span> {saleData.paymentMethod}</p>
         )}

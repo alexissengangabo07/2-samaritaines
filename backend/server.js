@@ -14,12 +14,12 @@ const PORT = process.env.PORT || 5000;
 // ==========================================
 
 // 1. CORS: Autorise les requêtes provenant de votre application React
-app.use(cors({
-  origin: [process.env.CLIENT_URL, 'http://localhost:5173', 'http://10.169.171.92:4173','http://10.169.171.92:5173', 'http://localhost:4173', 'http://192.168.0.100:5173', 'http://192.168.0.100:4173'], // URL par défaut de Vite / React
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
+// app.use(cors({
+//   origin: [process.env.CLIENT_URL, 'http://localhost:5173', 'http://10.169.171.92:4173','http://10.169.171.92:5173', 'http://localhost:4173', 'http://192.168.0.100:5173', 'http://192.168.0.100:4173'], // URL par défaut de Vite / React
+//   methods: ['GET', 'POST', 'PUT', 'DELETE'],
+//   allowedHeaders: ['Content-Type', 'Authorization']
+// }));
+app.use(cors())
 // 2. Morgan: Logger de requêtes HTTP pour le développement
 app.use(morgan('dev'));
 
@@ -41,7 +41,7 @@ app.get('/health', (req, res) => {
 
 // Gestion des routes non trouvées (404)
 app.use((req, res) => {
-  res.status(404).json({ message: 'Ressource non trouvée' });
+  res.status(404).json({ message: 'Ressource non trouvée 1' });
 });
 
 
@@ -63,7 +63,7 @@ const startServer = async () => {
     app.use(errorHandler);
     
     // Démarrage du serveur Express
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0', () => {
       console.log(` Serveur démarré sur le port ${PORT}`);
       console.log(` URL Client React autorisée : ${process.env.CLIENT_URL || 'http://localhost:5173'}`);
     });

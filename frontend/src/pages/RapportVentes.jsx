@@ -6,6 +6,7 @@ import Layout from '../components/Layout';
 import { Printer, ChevronLeft, ChevronRight, Search, FileText } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
 import { Receipt } from '../components/Receipt';
+import Entete from '../assets/entete.png'
 
 export default function RapportVentes() {
     const { user } = useAuth();
@@ -339,10 +340,8 @@ export default function RapportVentes() {
                 <Receipt ref={receiptRef} saleData={lastSale} />
 
                 <div ref={reportRef} className="p-8 bg-white text-slate-900 font-sans">
+                    <img src={Entete} alt='entete' />
                     <h2 className="text-xl font-bold mb-2">Rapport des Ventes - {activeTab.toUpperCase()}</h2>
-                    <p className="text-xs text-slate-500 mb-6">
-                        Généré le {new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                    </p>
 
                     <table className="w-full text-left border-collapse border border-slate-200 text-xs">
                         <thead>
