@@ -10,6 +10,9 @@ const Inventaire = require('./Inventaire');
 const DetailInventaire = require('./DetailInventaire');
 const Sortie = require('./Sortie');
 const SortieItem = require('./SortieItem');
+const Entreprise = require('./Entreprise'); // AJOUT
+const Abonne = require('./Abonne'); // AJOUT
+const Paiement = require('./Paiement'); // AJOUT
 const sequelize = require('../config/database');
 
 // Relations Product
@@ -65,6 +68,22 @@ SortieItem.belongsTo(Product, { foreignKey: 'produit_id', as: 'produit' });
 User.hasMany(Sortie, { foreignKey: 'user_id' });
 Sortie.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
+// ===================== AJOUT : Relations Entreprise / Abonne / Paiement =====================
+
+// Entreprise <-> Abonne (une entreprise a plusieurs abonnés/employés)
+Entreprise.hasMany(Abonne, { foreignKey: 'entreprise_id', as: 'abonnes' });
+Abonne.belongsTo(Entreprise, { foreignKey: 'entreprise_id', as: 'entreprise' });
+
+// Abonne <-> Vente (un abonné peut avoir plusieurs ventes/factures à crédit)
+Abonne.hasMany(Vente, { foreignKey: 'abonne_id', as: 'ventes' });
+Vente.belongsTo(Abonne, { foreignKey: 'abonne_id', as: 'abonne' });
+
+// Vente <-> Paiement (une vente peut recevoir plusieurs paiements/remboursements)
+Vente.hasMany(Paiement, { foreignKey: 'vente_id', as: 'paiements', onDelete: 'CASCADE' });
+Paiement.belongsTo(Vente, { foreignKey: 'vente_id', as: 'vente' });
+
+// ===============================================================================================
+
 module.exports = { 
   User, 
   Category, 
@@ -78,5 +97,8 @@ module.exports = {
   DetailVente, 
   Sortie, 
   SortieItem, 
+  Entreprise, // AJOUT
+  Abonne,     // AJOUT
+  Paiement,   // AJOUT
   sequelize 
 };

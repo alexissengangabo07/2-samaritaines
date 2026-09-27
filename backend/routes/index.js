@@ -10,6 +10,8 @@ const fournisseurRoutes = require('./fournisseur.routes');
 const uniteRoutes = require('./uniteQte.routes');
 const inventaireRoutes = require('./inventaire.routes');
 const sortieRoutes = require('./sortie.routes');
+const abonneRoutes = require('./abonne.routes');
+const entrepriseRoutes = require('./entreprise.routes');
 
 router.use('/users', userRoutes);
 router.use('/products', productRoutes);
@@ -20,5 +22,7 @@ router.use('/fournisseurs', fournisseurRoutes);
 router.use('/unites', uniteRoutes);
 router.use('/inventaires', inventaireRoutes);
 router.use('/sorties', sortieRoutes);
+router.use('/abonnes', abonneRoutes); // AJOUT
+router.use('/entreprises', entrepriseRoutes); // AJOUT
 
 module.exports = router;

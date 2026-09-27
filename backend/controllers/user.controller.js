@@ -1,11 +1,18 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { User, Vente, Approvisionnement, Product } = require('../models');
+const { estExpire, DATE_EXPIRATION } = require('../config/license');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'votre_cle_secrete_super_securisee';
 
 // AUTH: Connexion d'un utilisateur (Login)
 exports.login = async (req, res) => {
+  if (estExpire()) {
+    return res.status(403).json({
+      code: 'LICENSE_EXPIRED',
+      message: `L'accès à cette application a expiré le ${DATE_EXPIRATION.toLocaleDateString('fr-FR')}.`
+    });
+  }
   try {
     const { email, password } = req.body;
 

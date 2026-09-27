@@ -5,6 +5,8 @@ const morgan = require('morgan');
 const sequelize = require('./config/database'); // Chemin vers votre configuration Sequelize
 const apiRoutes = require('./routes'); // Importation du fichier routes/index.js
 const errorHandler = require('./middlewares/errorHandler');
+const checkLicense = require('./middlewares/checkLicense');
+const licenceRoutes = require('./routes/license.routes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -30,7 +32,8 @@ app.use(express.urlencoded({ extended: true }));
 // ==========================================
 // Routes de l'API
 // ==========================================
-
+app.use('/api/license', licenceRoutes);
+app.use('/api', checkLicense);
 // Préfixe global pour votre API REST
 app.use('/api', apiRoutes);
 

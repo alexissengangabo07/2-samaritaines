@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const API = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  baseURL: 'http://localhost:5000/api',
 });
 
 // Intercepteur pour ajouter le token JWT à chaque requête
@@ -12,5 +12,15 @@ API.interceptors.request.use((config) => {
   }
   return config;
 });
+
+API.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.data?.code === 'LICENSE_EXPIRED') {
+      window.location.href = '/expired';
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default API;

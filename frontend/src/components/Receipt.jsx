@@ -42,6 +42,9 @@ export const Receipt = forwardRef(({ saleData }, ref) => {
       <div className="mb-4 text-xs space-y-1">
         <p><span className="font-semibold">N° facture :</span> #{saleData.id || 'N/A'}</p>
         <p><span className="font-semibold">Client :</span> <span className="capitalize">{customerName}</span></p>
+        {saleData.entreprise_nom && (
+          <p><span className="font-semibold">Pris en charge par :</span> <span className="capitalize">{saleData.entreprise_nom}</span></p>
+        )}
         {/* <p><span className="font-semibold">Servi par :</span> <span className="capitalize">{sellerName}</span></p> */}
         {saleData.paymentMethod && (
           <p><span className="font-semibold">Paiement :</span> {saleData.paymentMethod}</p>
