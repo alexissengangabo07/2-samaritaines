@@ -7,6 +7,7 @@ const {
   UniteQte,
   Abonne,
   Paiement,
+  Dependant,
   Entreprise,
   sequelize,
 } = require("../models");
@@ -106,7 +107,8 @@ exports.createVente = async (req, res) => {
   const transaction = await sequelize.transaction();
 
   try {
-    const { nom_client, items, user_id, type_vente, abonne_id } = req.body;
+    const { nom_client, items, user_id, type_vente, abonne_id, dependant_id } =
+      req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       await transaction.rollback();
@@ -118,6 +120,7 @@ exports.createVente = async (req, res) => {
     const typeFinal = type_vente === "abonne" ? "abonne" : "comptant";
     let abonne = null;
     let pourcentageReduction = 0;
+    let dependant = null;
 
     // Si c'est une vente abonné, on valide l'abonné et on récupère la réduction de son entreprise
     if (typeFinal === "abonne") {
@@ -141,6 +144,19 @@ exports.createVente = async (req, res) => {
       }
 
       pourcentageReduction = getReductionAbonne(abonne);
+      if (dependant_id) {
+        dependant = await Dependant.findByPk(dependant_id, { transaction });
+        if (
+          !dependant ||
+          !dependant.actif ||
+          dependant.abonne_id !== abonne.id
+        ) {
+          await transaction.rollback();
+          return res.status(404).json({
+            message: "Dépendant introuvable ou invalide pour cet abonné.",
+          });
+        }
+      }
     }
 
     let totalFacture = 0;
@@ -192,11 +208,16 @@ exports.createVente = async (req, res) => {
     const nouvelleVente = await Vente.create(
       {
         nom_client:
-          typeFinal === "abonne" ? abonne.nom : nom_client || "Anonyme",
+          typeFinal === "abonne"
+            ? dependant
+              ? `${dependant.nom} (${dependant.lien || "Dépendant"} de ${abonne.nom})`
+              : abonne.nom
+            : nom_client || "Anonyme",
         total: totalFacture,
         user_id: user_id || req.user?.id,
         type_vente: typeFinal,
         abonne_id: typeFinal === "abonne" ? abonne.id : null,
+        dependant_id: dependant ? dependant.id : null,
       },
       { transaction },
     );
