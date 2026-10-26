@@ -1,41 +1,56 @@
-const { Vente, DetailVente, Product, User, Category, UniteQte, Abonne, Paiement, Entreprise, sequelize } = require('../models');
+const {
+  Vente,
+  DetailVente,
+  Product,
+  User,
+  Category,
+  UniteQte,
+  Abonne,
+  Paiement,
+  Entreprise,
+  sequelize,
+} = require("../models");
 
 // Jointures associées à la vente
 const venteIncludes = [
   {
     model: DetailVente,
-    as: 'items',
-    attributes: ['id', 'quantite', 'prix_unitaire', 'total_ligne'],
+    as: "items",
+    attributes: ["id", "quantite", "prix_unitaire", "total_ligne"],
     include: [
       {
         model: Product,
-        as: 'produit',
-        attributes: ['id', 'nom', 'prix_achat', 'prix_vente'],
+        as: "produit",
+        attributes: ["id", "nom", "prix_achat", "prix_vente"],
         include: [
-          { model: Category, attributes: ['nom'] },
-          { model: UniteQte, attributes: ['label'] }
-        ]
-      }
-    ]
+          { model: Category, attributes: ["nom"] },
+          { model: UniteQte, attributes: ["label"] },
+        ],
+      },
+    ],
   },
   {
     model: User,
-    as: 'vendeur',
-    attributes: ['id', 'name', 'email', 'role']
+    as: "vendeur",
+    attributes: ["id", "name", "email", "role"],
   },
   {
     model: Abonne,
-    as: 'abonne',
-    attributes: ['id', 'nom', 'telephone'],
+    as: "abonne",
+    attributes: ["id", "nom", "telephone"],
     include: [
-      { model: Entreprise, as: 'entreprise', attributes: ['id', 'nom', 'pourcentage_reduction'] }
-    ]
+      {
+        model: Entreprise,
+        as: "entreprise",
+        attributes: ["id", "nom", "pourcentage_reduction"],
+      },
+    ],
   },
   {
     model: Paiement,
-    as: 'paiements',
-    attributes: ['id', 'montant', 'mode_paiement', 'datePaiement']
-  }
+    as: "paiements",
+    attributes: ["id", "montant", "mode_paiement", "datePaiement"],
+  },
 ];
 
 // --- Utilitaires internes réutilisés dans plusieurs fonctions ---
@@ -52,7 +67,7 @@ function calculerSolde(vente) {
   const montantPaye = paiements.reduce((somme, p) => somme + p.montant, 0);
   return {
     montant_paye: montantPaye,
-    solde: vente.total - montantPaye
+    solde: vente.total - montantPaye,
   };
 }
 
@@ -61,14 +76,14 @@ exports.getAllVentes = async (req, res) => {
   try {
     const ventes = await Vente.findAll({
       include: venteIncludes,
-      order: [['dateVente', 'DESC']]
+      order: [["dateVente", "DESC"]],
     });
 
     res.status(200).json(ventes);
   } catch (error) {
     res.status(500).json({
       message: "Erreur lors de la récupération des ventes",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -76,7 +91,9 @@ exports.getAllVentes = async (req, res) => {
 // READ: Obtenir une vente par ID
 exports.getVenteById = async (req, res) => {
   try {
-    const vente = await Vente.findByPk(req.params.id, { include: venteIncludes });
+    const vente = await Vente.findByPk(req.params.id, {
+      include: venteIncludes,
+    });
     if (!vente) return res.status(404).json({ message: "Vente non trouvée" });
     res.status(200).json(vente);
   } catch (error) {
@@ -93,28 +110,34 @@ exports.createVente = async (req, res) => {
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       await transaction.rollback();
-      return res.status(400).json({ message: "La vente doit contenir au moins un produit." });
+      return res
+        .status(400)
+        .json({ message: "La vente doit contenir au moins un produit." });
     }
 
-    const typeFinal = type_vente === 'abonne' ? 'abonne' : 'comptant';
+    const typeFinal = type_vente === "abonne" ? "abonne" : "comptant";
     let abonne = null;
     let pourcentageReduction = 0;
 
     // Si c'est une vente abonné, on valide l'abonné et on récupère la réduction de son entreprise
-    if (typeFinal === 'abonne') {
+    if (typeFinal === "abonne") {
       if (!abonne_id) {
         await transaction.rollback();
-        return res.status(400).json({ message: "Veuillez sélectionner un abonné pour une vente à crédit." });
+        return res.status(400).json({
+          message: "Veuillez sélectionner un abonné pour une vente à crédit.",
+        });
       }
 
       abonne = await Abonne.findByPk(abonne_id, {
-        include: [{ model: Entreprise, as: 'entreprise' }],
-        transaction
+        include: [{ model: Entreprise, as: "entreprise" }],
+        transaction,
       });
 
       if (!abonne || !abonne.actif) {
         await transaction.rollback();
-        return res.status(404).json({ message: "Abonné introuvable ou inactif." });
+        return res
+          .status(404)
+          .json({ message: "Abonné introuvable ou inactif." });
       }
 
       pourcentageReduction = getReductionAbonne(abonne);
@@ -129,71 +152,79 @@ exports.createVente = async (req, res) => {
 
       if (!produit) {
         await transaction.rollback();
-        return res.status(404).json({ message: `Produit ID ${item.id_produit} non trouvé.` });
+        return res
+          .status(404)
+          .json({ message: `Produit ID ${item.id_produit} non trouvé.` });
       }
 
       if (produit.quantite < item.quantite) {
         await transaction.rollback();
         return res.status(400).json({
-          message: `Stock insuffisant pour le produit ${produit.nom}. En stock: ${produit.quantite}, Demandé: ${item.quantite}`
+          message: `Stock insuffisant pour le produit ${produit.nom}. En stock: ${produit.quantite}, Demandé: ${item.quantite}`,
         });
       }
 
       // Le prix est toujours recalculé côté serveur (jamais accepté depuis le frontend)
       // pour éviter qu'un client malveillant manipule le prix envoyé à l'API
       const prixBase = produit.prix_vente;
-      const prixUnitaire = typeFinal === 'abonne'
-        ? Math.round(prixBase * (1 - pourcentageReduction / 100))
-        : prixBase;
+      const prixUnitaire =
+        typeFinal === "abonne"
+          ? Math.round(prixBase * (1 - pourcentageReduction / 100))
+          : prixBase;
 
       const totalLigne = prixUnitaire * item.quantite;
       totalFacture += totalLigne;
 
       await produit.update(
         { quantite: produit.quantite - item.quantite },
-        { transaction }
+        { transaction },
       );
 
       detailsAInserer.push({
         produit_id: item.id_produit,
         quantite: item.quantite,
         prix_unitaire: prixUnitaire,
-        total_ligne: totalLigne
+        total_ligne: totalLigne,
       });
     }
 
     // Créer l'entête de la vente
-    const nouvelleVente = await Vente.create({
-      nom_client: typeFinal === 'abonne' ? abonne.nom : (nom_client || 'Anonyme'),
-      total: totalFacture,
-      user_id: user_id || req.user?.id,
-      type_vente: typeFinal,
-      abonne_id: typeFinal === 'abonne' ? abonne.id : null
-    }, { transaction });
+    const nouvelleVente = await Vente.create(
+      {
+        nom_client:
+          typeFinal === "abonne" ? abonne.nom : nom_client || "Anonyme",
+        total: totalFacture,
+        user_id: user_id || req.user?.id,
+        type_vente: typeFinal,
+        abonne_id: typeFinal === "abonne" ? abonne.id : null,
+      },
+      { transaction },
+    );
 
     // Associer la facture créée à chaque ligne
-    const detailsAvecVenteId = detailsAInserer.map(detail => ({
+    const detailsAvecVenteId = detailsAInserer.map((detail) => ({
       ...detail,
-      vente_id: nouvelleVente.id
+      vente_id: nouvelleVente.id,
     }));
 
     await DetailVente.bulkCreate(detailsAvecVenteId, { transaction });
 
     await transaction.commit();
 
-    const venteComplete = await Vente.findByPk(nouvelleVente.id, { include: venteIncludes });
+    const venteComplete = await Vente.findByPk(nouvelleVente.id, {
+      include: venteIncludes,
+    });
 
     res.status(201).json({
       message: "Vente enregistrée avec succès",
-      vente: venteComplete
+      vente: venteComplete,
     });
-
   } catch (error) {
     await transaction.rollback();
     console.error("Erreur création vente :", error);
     res.status(500).json({
       message: "Erreur lors de l'enregistrement de la vente",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -208,17 +239,21 @@ exports.addItemsToVente = async (req, res) => {
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       await transaction.rollback();
-      return res.status(400).json({ message: "Veuillez fournir au moins un produit à ajouter." });
+      return res
+        .status(400)
+        .json({ message: "Veuillez fournir au moins un produit à ajouter." });
     }
 
     // On charge la vente avec son abonné + entreprise pour connaître la réduction à appliquer
     const vente = await Vente.findByPk(id, {
-      include: [{
-        model: Abonne,
-        as: 'abonne',
-        include: [{ model: Entreprise, as: 'entreprise' }]
-      }],
-      transaction
+      include: [
+        {
+          model: Abonne,
+          as: "abonne",
+          include: [{ model: Entreprise, as: "entreprise" }],
+        },
+      ],
+      transaction,
     });
 
     if (!vente) {
@@ -226,9 +261,8 @@ exports.addItemsToVente = async (req, res) => {
       return res.status(404).json({ message: "Vente (facture) non trouvée." });
     }
 
-    const pourcentageReduction = vente.type_vente === 'abonne'
-      ? getReductionAbonne(vente.abonne)
-      : 0;
+    const pourcentageReduction =
+      vente.type_vente === "abonne" ? getReductionAbonne(vente.abonne) : 0;
 
     let totalAjoute = 0;
     const detailsAInserer = [];
@@ -238,23 +272,27 @@ exports.addItemsToVente = async (req, res) => {
 
       if (!produit) {
         await transaction.rollback();
-        return res.status(404).json({ message: `Produit ID ${item.id_produit} non trouvé.` });
+        return res
+          .status(404)
+          .json({ message: `Produit ID ${item.id_produit} non trouvé.` });
       }
 
       if (produit.quantite < item.quantite) {
         await transaction.rollback();
         return res.status(400).json({
-          message: `Stock insuffisant pour ${produit.nom}. En stock: ${produit.quantite}, Demandé: ${item.quantite}`
+          message: `Stock insuffisant pour ${produit.nom}. En stock: ${produit.quantite}, Demandé: ${item.quantite}`,
         });
       }
 
-      const prixUnitaire = Math.round(produit.prix_vente * (1 - pourcentageReduction / 100));
+      const prixUnitaire = Math.round(
+        produit.prix_vente * (1 - pourcentageReduction / 100),
+      );
       const totalLigne = prixUnitaire * item.quantite;
       totalAjoute += totalLigne;
 
       await produit.update(
         { quantite: produit.quantite - item.quantite },
-        { transaction }
+        { transaction },
       );
 
       detailsAInserer.push({
@@ -262,7 +300,7 @@ exports.addItemsToVente = async (req, res) => {
         produit_id: item.id_produit,
         quantite: item.quantite,
         prix_unitaire: prixUnitaire,
-        total_ligne: totalLigne
+        total_ligne: totalLigne,
       });
     }
 
@@ -271,9 +309,9 @@ exports.addItemsToVente = async (req, res) => {
     await vente.update(
       {
         total: vente.total + totalAjoute,
-        dateMiseAJour: new Date()
+        dateMiseAJour: new Date(),
       },
-      { transaction }
+      { transaction },
     );
 
     await transaction.commit();
@@ -282,15 +320,14 @@ exports.addItemsToVente = async (req, res) => {
 
     res.status(200).json({
       message: "Article(s) ajouté(s) à la facture avec succès",
-      vente: venteMiseAJour
+      vente: venteMiseAJour,
     });
-
   } catch (error) {
     await transaction.rollback();
     console.error("Erreur ajout article à la vente :", error);
     res.status(500).json({
       message: "Erreur lors de l'ajout de l'article à la facture",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -299,18 +336,19 @@ exports.addItemsToVente = async (req, res) => {
 exports.getVentesCredit = async (req, res) => {
   try {
     const ventes = await Vente.findAll({
-      where: { type_vente: 'abonne' },
+      where: { type_vente: "abonne" },
       include: venteIncludes,
-      order: [['dateVente', 'DESC']]
+      order: [["dateVente", "DESC"]],
     });
 
-    const result = ventes.map(vente => {
+    const result = ventes.map((vente) => {
       const { montant_paye, solde } = calculerSolde(vente);
       return {
         ...vente.toJSON(),
         montant_paye,
         solde,
-        statut_paiement: montant_paye <= 0 ? 'non_payé' : solde <= 0 ? 'payé' : 'partiel'
+        statut_paiement:
+          montant_paye <= 0 ? "non_payé" : solde <= 0 ? "payé" : "partiel",
       };
     });
 
@@ -318,7 +356,7 @@ exports.getVentesCredit = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Erreur lors de la récupération des ventes à crédit",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -330,7 +368,9 @@ exports.addPaiement = async (req, res) => {
 
     const montantPaiement = parseFloat(montant);
     if (isNaN(montantPaiement) || montantPaiement <= 0) {
-      return res.status(400).json({ message: "Le montant du paiement doit être supérieur à 0." });
+      return res
+        .status(400)
+        .json({ message: "Le montant du paiement doit être supérieur à 0." });
     }
 
     const vente = await Vente.findByPk(vente_id, { include: venteIncludes });
@@ -338,65 +378,91 @@ exports.addPaiement = async (req, res) => {
       return res.status(404).json({ message: "Vente non trouvée." });
     }
 
-    if (vente.type_vente !== 'abonne') {
-      return res.status(400).json({ message: "Cette vente n'est pas une vente à crédit (abonné)." });
+    if (vente.type_vente !== "abonne") {
+      return res.status(400).json({
+        message: "Cette vente n'est pas une vente à crédit (abonné).",
+      });
     }
 
     const { solde } = calculerSolde(vente);
 
     if (montantPaiement > solde) {
       return res.status(400).json({
-        message: `Le montant dépasse le solde restant dû (${solde.toLocaleString()} FC).`
+        message: `Le montant dépasse le solde restant dû (${solde.toLocaleString()} FC).`,
       });
     }
 
     const paiement = await Paiement.create({
       vente_id,
       montant: montantPaiement,
-      mode_paiement: mode_paiement || null
+      mode_paiement: mode_paiement || null,
     });
 
     res.status(201).json({
       message: "Paiement enregistré avec succès",
       paiement,
-      solde_restant: solde - montantPaiement
+      solde_restant: solde - montantPaiement,
     });
   } catch (error) {
     res.status(500).json({
       message: "Erreur lors de l'enregistrement du paiement",
-      error: error.message
+      error: error.message,
     });
   }
 };
 
 // DELETE: Annuler/Supprimer une vente (+ réajustement du stock)
+// DELETE: Annuler/Supprimer une vente (+ réajustement du stock)
 exports.deleteVente = async (req, res) => {
+  const transaction = await sequelize.transaction();
   try {
     const vente = await Vente.findByPk(req.params.id, {
-      include: [{ model: DetailVente, as: 'items' }]
+      include: [
+        { model: DetailVente, as: "items" },
+        { model: Paiement, as: "paiements" },
+      ],
+      transaction,
     });
-    if (!vente) return res.status(404).json({ message: "Vente non trouvée" });
 
-    // Restituer le stock pour chaque ligne de la facture (pas seulement un produit unique)
-    const transaction = await sequelize.transaction();
-    try {
-      for (const item of vente.items) {
-        await Product.increment('quantite', {
-          by: item.quantite,
-          where: { id: item.produit_id },
-          transaction
-        });
-      }
-
-      await vente.destroy({ transaction });
-      await transaction.commit();
-
-      res.status(200).json({ message: "Vente annulée et stock réajusté" });
-    } catch (err) {
+    if (!vente) {
       await transaction.rollback();
-      throw err;
+      return res.status(404).json({ message: "Vente non trouvée" });
     }
+
+    // 1. Restituer le stock pour chaque ligne de la facture
+    for (const item of vente.items) {
+      await Product.increment("quantite", {
+        by: item.quantite,
+        where: { id: item.produit_id },
+        transaction,
+      });
+    }
+
+    // 2. Supprimer les paiements associés (le cas échéant)
+    await Paiement.destroy({
+      where: { vente_id: vente.id },
+      transaction,
+    });
+
+    // 3. Supprimer les détails de la vente pour lever la contrainte de clé étrangère
+    await DetailVente.destroy({
+      where: { vente_id: vente.id },
+      transaction,
+    });
+
+    // 4. Supprimer la vente
+    await vente.destroy({ transaction });
+
+    await transaction.commit();
+
+    res
+      .status(200)
+      .json({ message: "Vente annulée et stock réajusté avec succès" });
   } catch (error) {
-    res.status(500).json({ message: "Erreur lors de l'annulation", error: error.message });
+    await transaction.rollback();
+    console.error("Erreur lors de l'annulation de la vente :", error);
+    res
+      .status(500)
+      .json({ message: "Erreur lors de l'annulation", error: error.message });
   }
 };
