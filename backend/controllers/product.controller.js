@@ -11,6 +11,9 @@ const productIncludes = [
 exports.getAllProducts = async (req, res) => {
   try {
     const products = await Product.findAll({
+      order: [
+        ['nom', 'ASC']
+      ],
       include: productIncludes
     });
     res.status(200).json(products);
