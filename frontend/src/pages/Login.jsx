@@ -1,26 +1,38 @@
-import { useState } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import { Pill, Lock, Mail, AlertCircle, ArrowRight } from 'lucide-react';
+import { useState } from "react";
+import { useAuth } from "../context/AuthContext";
+import { useNavigate } from "react-router-dom";
+import {
+  Pill,
+  Lock,
+  Mail,
+  AlertCircle,
+  ArrowRight,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 
 export default function Login() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
+    setError("");
     setIsSubmitting(true);
-    
+
     try {
       await login(email, password);
-      navigate('/dashboard');
+      navigate("/dashboard");
     } catch (err) {
-      setError(err.response?.data?.message || 'Identifiants invalides. Veuillez réessayer.');
+      setError(
+        err.response?.data?.message ||
+          "Identifiants invalides. Veuillez réessayer.",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -38,8 +50,12 @@ export default function Login() {
           <div className="w-14 h-14 bg-teal-600 rounded-2xl mx-auto flex items-center justify-center text-white mb-4 shadow-xl shadow-teal-600/30">
             <Pill className="w-8 h-8" />
           </div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Espace Pharmacie</h2>
-          <p className="text-sm text-slate-500 mt-1">Connectez-vous pour accéder au gestionnaire</p>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+            Afya Care System
+          </h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Connectez-vous pour accéder au logiciel
+          </p>
         </div>
 
         {/* Error Alert */}
@@ -76,13 +92,34 @@ export default function Login() {
             <div className="relative">
               <Lock className="w-5 h-5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-all"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-11 pr-11 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-all"
                 required
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                title={
+                  showPassword
+                    ? "Cacher le mot de passe"
+                    : "Visualiser le mot de passe"
+                }
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none transition-colors"
+                aria-label={
+                  showPassword
+                    ? "Cacher le mot de passe"
+                    : "Visualiser le mot de passe"
+                }
+              >
+                {showPassword ? (
+                  <EyeOff className="w-5 h-5" />
+                ) : (
+                  <Eye className="w-5 h-5" />
+                )}
+              </button>
             </div>
           </div>
 
