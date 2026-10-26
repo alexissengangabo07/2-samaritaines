@@ -48,11 +48,17 @@ export default function Ventes() {
   const [message, setMessage] = useState({ type: "", text: "" });
   const [typeVente, setTypeVente] = useState("comptant"); // 'comptant' | 'abonne'
   const [selectedAbonneId, setSelectedAbonneId] = useState("");
+  const [selectedDependantId, setSelectedDependantId] = useState("");
 
   // États pour le Select personnalisé des abonnés avec filtre
   const [abonneSearch, setAbonneSearch] = useState("");
   const [isAbonneDropdownOpen, setIsAbonneDropdownOpen] = useState(false);
   const abonneDropdownRef = useRef(null);
+
+  // États pour le Select personnalisé des dépendants avec filtre
+  const [dependantSearch, setDependantSearch] = useState("");
+  const [isDependantDropdownOpen, setIsDependantDropdownOpen] = useState(false);
+  const dependantDropdownRef = useRef(null);
 
   // États pour le Select personnalisé principal avec filtre (Médicaments)
   const [productSearch, setProductSearch] = useState("");
@@ -97,6 +103,10 @@ export default function Ventes() {
     (a) => a.id === parseInt(selectedAbonneId),
   );
 
+  const selectedDependant = selectedAbonne?.dependants?.find(
+    (d) => d.id === parseInt(selectedDependantId, 10),
+  );
+
   // Fermer les menus déroulants lors du clic à l'extérieur
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -110,6 +120,12 @@ export default function Ventes() {
         setIsAbonneDropdownOpen(false);
       }
       if (
+        dependantDropdownRef.current &&
+        !dependantDropdownRef.current.contains(event.target)
+      ) {
+        setIsDependantDropdownOpen(false);
+      }
+      if (
         addDropdownRef.current &&
         !addDropdownRef.current.contains(event.target)
       ) {
@@ -120,12 +136,21 @@ export default function Ventes() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Filtrage des abonnés et des produits
+  // Filtrage des abonnés, dépendants et produits
   const filteredAbonnes = abonnes.filter(
     (a) =>
       a.nom?.toLowerCase().includes(abonneSearch.toLowerCase()) ||
       a.entreprise?.nom?.toLowerCase().includes(abonneSearch.toLowerCase()),
   );
+
+  const filteredDependants = selectedAbonne?.dependants
+    ? selectedAbonne.dependants.filter(
+        (d) =>
+          d.nom?.toLowerCase().includes(dependantSearch.toLowerCase()) ||
+          (d.lien &&
+            d.lien.toLowerCase().includes(dependantSearch.toLowerCase())),
+      )
+    : [];
 
   const filteredProducts = products.filter((p) =>
     p.nom?.toLowerCase().includes(productSearch.toLowerCase()),
@@ -233,11 +258,17 @@ export default function Ventes() {
       const saleDetails = {
         id: data?.data?.vente?.id || data?.data?.id || Date.now(),
         user_name: user?.name || user?.nom || "Vendeur",
-        nom_client: nom_client.trim() || "Client ordinaire",
+        nom_client: selectedDependant
+          ? `${selectedDependant.nom} (${selectedDependant.lien || "Dépendant"} de ${selectedAbonne?.nom})`
+          : typeVente === "abonne"
+            ? selectedAbonne?.nom
+            : nom_client.trim() || "Client ordinaire",
         entreprise_nom:
           typeVente === "abonne"
             ? selectedAbonne?.entreprise?.nom || null
             : null,
+        abonne: selectedAbonne ? { nom: selectedAbonne.nom } : null,
+        dependant_id: selectedDependantId || null,
         date: new Date(),
         items: cartItems.map((item) => ({
           nom: item.nom,
@@ -254,8 +285,10 @@ export default function Ventes() {
       setQuantite(1);
       setTypeVente("comptant");
       setSelectedAbonneId("");
+      setSelectedDependantId("");
       setProductSearch("");
       setAbonneSearch("");
+      setDependantSearch("");
 
       setTimeout(() => handlePrint(), 300);
     },
@@ -269,12 +302,12 @@ export default function Ventes() {
     },
   });
 
-  // Mutation pour annuler/supprimer une vente (Restitue le stock automatiquement via l'API)
+  // Mutation pour annuler/supprimer une vente
   const deleteVenteMutation = useMutation({
     mutationFn: (id) => deleteVente(id),
     onSuccess: () => {
       queryClient.invalidateQueries(["ventes"]);
-      queryClient.invalidateQueries(["products"]); // Recharge les stocks car ils sont restitués
+      queryClient.invalidateQueries(["products"]);
       setMessage({
         type: "success",
         text: "Vente annulée et stock réajusté avec succès.",
@@ -319,12 +352,17 @@ export default function Ventes() {
         id_produit: item.id_produit,
         quantite: item.quantite,
       })),
-      nom_client:
-        typeVente === "abonne"
+      nom_client: selectedDependant
+        ? `${selectedDependant.nom} (${selectedDependant.lien || "Dépendant"} de ${selectedAbonne?.nom})`
+        : typeVente === "abonne"
           ? selectedAbonne?.nom
           : nom_client.trim() || "Client ordinaire",
       type_vente: typeVente,
       abonne_id: typeVente === "abonne" ? selectedAbonne?.id : null,
+      dependant_id:
+        typeVente === "abonne" && selectedDependantId
+          ? parseInt(selectedDependantId, 10)
+          : null,
       user_id: user.id,
     });
   };
@@ -335,6 +373,8 @@ export default function Ventes() {
       user_name: vente.vendeur?.name || vente.User?.name || "Vendeur",
       nom_client: vente.nom_client || "Client ordinaire",
       entreprise_nom: vente.abonne?.entreprise?.nom || null,
+      abonne: vente.abonne ? { nom: vente.abonne.nom } : null,
+      dependant_id: vente.dependant_id,
       date: vente.dateMiseAJour || vente.createdAt || vente.dateVente,
       items:
         vente.items?.length > 0
@@ -493,6 +533,11 @@ export default function Ventes() {
             venteMiseAJour.User?.name ||
             "Vendeur",
           nom_client: venteMiseAJour.nom_client || "Client ordinaire",
+          entreprise_nom: venteMiseAJour.abonne?.entreprise?.nom || null,
+          abonne: venteMiseAJour.abonne
+            ? { nom: venteMiseAJour.abonne.nom }
+            : null,
+          dependant_id: venteMiseAJour.dependant_id,
           date: venteMiseAJour.dateVente || venteMiseAJour.createdAt,
           items:
             venteMiseAJour.items?.map((vi) => ({
@@ -600,7 +645,9 @@ export default function Ventes() {
                     onClick={() => {
                       setTypeVente("comptant");
                       setSelectedAbonneId("");
+                      setSelectedDependantId("");
                       setAbonneSearch("");
+                      setDependantSearch("");
                     }}
                     className={`py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                       typeVente === "comptant"
@@ -625,101 +672,212 @@ export default function Ventes() {
               </div>
 
               {typeVente === "abonne" && (
-                <div className="relative" ref={abonneDropdownRef}>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Abonné
-                  </label>
+                <div className="space-y-3">
+                  <div className="relative" ref={abonneDropdownRef}>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                      Abonné
+                    </label>
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setIsAbonneDropdownOpen(!isAbonneDropdownOpen)
-                    }
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-all cursor-pointer"
-                  >
-                    <span
-                      className={
-                        selectedAbonne
-                          ? "text-slate-900 font-medium capitalize"
-                          : "text-slate-400"
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setIsAbonneDropdownOpen(!isAbonneDropdownOpen)
                       }
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-all cursor-pointer"
                     >
-                      {selectedAbonne
-                        ? `${selectedAbonne.nom} ${selectedAbonne.entreprise ? `(-${selectedAbonne.entreprise.pourcentage_reduction}% via ${selectedAbonne.entreprise.nom})` : "(sans réduction)"}`
-                        : "-- Choisir un abonné --"}
-                    </span>
-                    <ChevronDown className="w-4 h-4 text-slate-400" />
-                  </button>
+                      <span
+                        className={
+                          selectedAbonne
+                            ? "text-slate-900 font-medium capitalize"
+                            : "text-slate-400"
+                        }
+                      >
+                        {selectedAbonne
+                          ? `${selectedAbonne.nom} ${selectedAbonne.entreprise ? `(-${selectedAbonne.entreprise.pourcentage_reduction}% via ${selectedAbonne.entreprise.nom})` : "(sans réduction)"}`
+                          : "-- Choisir un abonné --"}
+                      </span>
+                      <ChevronDown className="w-4 h-4 text-slate-400" />
+                    </button>
 
-                  {isAbonneDropdownOpen && (
-                    <div className="absolute z-50 mt-1.5 w-full bg-white border border-slate-200 rounded-2xl shadow-xl p-2 max-h-60 flex flex-col gap-2">
-                      <div className="relative">
-                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="text"
-                          placeholder="Rechercher un abonné..."
-                          value={abonneSearch}
-                          onChange={(e) => setAbonneSearch(e.target.value)}
-                          autoFocus
-                          className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
-                        />
+                    {isAbonneDropdownOpen && (
+                      <div className="absolute z-50 mt-1.5 w-full bg-white border border-slate-200 rounded-2xl shadow-xl p-2 max-h-60 flex flex-col gap-2">
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            placeholder="Rechercher un abonné..."
+                            value={abonneSearch}
+                            onChange={(e) => setAbonneSearch(e.target.value)}
+                            autoFocus
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                          />
+                        </div>
+
+                        <div className="overflow-y-auto max-h-40 divide-y divide-slate-50">
+                          {filteredAbonnes.length === 0 ? (
+                            <div className="py-3 text-center text-xs text-slate-400">
+                              Aucun abonné trouvé
+                            </div>
+                          ) : (
+                            filteredAbonnes.map((a) => {
+                              const isSelected =
+                                parseInt(selectedAbonneId, 10) === a.id;
+                              return (
+                                <button
+                                  key={a.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedAbonneId(a.id.toString());
+                                    setSelectedDependantId("");
+                                    setDependantSearch("");
+                                    setIsAbonneDropdownOpen(false);
+                                    setAbonneSearch("");
+                                  }}
+                                  className={`w-full text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                                    isSelected
+                                      ? "bg-teal-50 text-teal-700 font-semibold"
+                                      : "hover:bg-slate-50 text-slate-700"
+                                  }`}
+                                >
+                                  <span className="capitalize">
+                                    {a.nom}{" "}
+                                    {a.entreprise
+                                      ? `(-${a.entreprise.pourcentage_reduction}% via ${a.entreprise.nom})`
+                                      : ""}
+                                  </span>
+                                  {isSelected && (
+                                    <Check className="w-3.5 h-3.5 text-teal-600" />
+                                  )}
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
                       </div>
+                    )}
 
-                      <div className="overflow-y-auto max-h-40 divide-y divide-slate-50">
-                        {filteredAbonnes.length === 0 ? (
-                          <div className="py-3 text-center text-xs text-slate-400">
-                            Aucun abonné trouvé
-                          </div>
-                        ) : (
-                          filteredAbonnes.map((a) => {
-                            const isSelected =
-                              parseInt(selectedAbonneId, 10) === a.id;
-                            return (
+                    {selectedAbonne &&
+                      (selectedAbonne.entreprise ? (
+                        <p className="text-[10px] text-teal-600 font-semibold mt-1.5 flex items-center gap-1">
+                          <Percent className="w-3 h-3" /> Réduction de{" "}
+                          {selectedAbonne.entreprise.pourcentage_reduction}% (
+                          {selectedAbonne.entreprise.nom}) appliquée
+                          automatiquement
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-amber-600 font-semibold mt-1.5 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" /> Cet abonné n'a pas
+                          d'entreprise associée : aucune réduction appliquée
+                        </p>
+                      ))}
+                  </div>
+
+                  {selectedAbonne &&
+                    selectedAbonne.dependants &&
+                    selectedAbonne.dependants.length > 0 && (
+                      <div className="relative" ref={dependantDropdownRef}>
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                          Bénéficiaire (Optionnel)
+                        </label>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setIsDependantDropdownOpen(!isDependantDropdownOpen)
+                          }
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-all cursor-pointer"
+                        >
+                          <span
+                            className={
+                              selectedDependant
+                                ? "text-slate-900 font-medium capitalize"
+                                : "text-slate-400"
+                            }
+                          >
+                            {selectedDependant
+                              ? `${selectedDependant.nom} (${selectedDependant.lien || "Dépendant"})`
+                              : "-- C'est l'abonné principal --"}
+                          </span>
+                          <ChevronDown className="w-4 h-4 text-slate-400" />
+                        </button>
+
+                        {isDependantDropdownOpen && (
+                          <div className="absolute z-50 mt-1.5 w-full bg-white border border-slate-200 rounded-2xl shadow-xl p-2 max-h-60 flex flex-col gap-2">
+                            <div className="relative">
+                              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                              <input
+                                type="text"
+                                placeholder="Rechercher un bénéficiaire..."
+                                value={dependantSearch}
+                                onChange={(e) =>
+                                  setDependantSearch(e.target.value)
+                                }
+                                autoFocus
+                                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                              />
+                            </div>
+
+                            <div className="overflow-y-auto max-h-40 divide-y divide-slate-50">
                               <button
-                                key={a.id}
                                 type="button"
                                 onClick={() => {
-                                  setSelectedAbonneId(a.id.toString());
-                                  setIsAbonneDropdownOpen(false);
-                                  setAbonneSearch("");
+                                  setSelectedDependantId("");
+                                  setIsDependantDropdownOpen(false);
+                                  setDependantSearch("");
                                 }}
                                 className={`w-full text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer ${
-                                  isSelected
+                                  !selectedDependantId
                                     ? "bg-teal-50 text-teal-700 font-semibold"
                                     : "hover:bg-slate-50 text-slate-700"
                                 }`}
                               >
-                                <span className="capitalize">
-                                  {a.nom}{" "}
-                                  {a.entreprise
-                                    ? `(-${a.entreprise.pourcentage_reduction}% via ${a.entreprise.nom})`
-                                    : ""}
-                                </span>
-                                {isSelected && (
+                                <span>-- C'est l'abonné principal --</span>
+                                {!selectedDependantId && (
                                   <Check className="w-3.5 h-3.5 text-teal-600" />
                                 )}
                               </button>
-                            );
-                          })
+
+                              {filteredDependants.length === 0 ? (
+                                <div className="py-3 text-center text-xs text-slate-400">
+                                  Aucun bénéficiaire trouvé
+                                </div>
+                              ) : (
+                                filteredDependants.map((dep) => {
+                                  const isSelected =
+                                    parseInt(selectedDependantId, 10) ===
+                                    dep.id;
+                                  return (
+                                    <button
+                                      key={dep.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedDependantId(
+                                          dep.id.toString(),
+                                        );
+                                        setIsDependantDropdownOpen(false);
+                                        setDependantSearch("");
+                                      }}
+                                      className={`w-full text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                                        isSelected
+                                          ? "bg-teal-50 text-teal-700 font-semibold"
+                                          : "hover:bg-slate-50 text-slate-700"
+                                      }`}
+                                    >
+                                      <span className="capitalize">
+                                        {dep.nom} ({dep.lien || "Dépendant"})
+                                      </span>
+                                      {isSelected && (
+                                        <Check className="w-3.5 h-3.5 text-teal-600" />
+                                      )}
+                                    </button>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
                         )}
                       </div>
-                    </div>
-                  )}
-
-                  {selectedAbonne &&
-                    (selectedAbonne.entreprise ? (
-                      <p className="text-[10px] text-teal-600 font-semibold mt-1.5 flex items-center gap-1">
-                        <Percent className="w-3 h-3" /> Réduction de{" "}
-                        {selectedAbonne.entreprise.pourcentage_reduction}% (
-                        {selectedAbonne.entreprise.nom}) appliquée
-                        automatiquement
-                      </p>
-                    ) : (
-                      <p className="text-[10px] text-amber-600 font-semibold mt-1.5 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" /> Cet abonné n'a pas
-                        d'entreprise associée : aucune réduction appliquée
-                      </p>
-                    ))}
+                    )}
                 </div>
               )}
 
@@ -1041,7 +1199,6 @@ export default function Ventes() {
                               >
                                 <Printer className="w-4 h-4" />
                               </button>
-                              {/* Affiché uniquement si l'utilisateur est admin */}
                               {user?.role === "admin" && (
                                 <button
                                   onClick={() => handleDeleteVente(vente.id)}
