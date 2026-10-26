@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Sep 21, 2026 at 03:49 PM
+-- Generation Time: Oct 26, 2026 at 08:41 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.1.25
 
@@ -20,6 +20,22 @@ SET time_zone = "+00:00";
 --
 -- Database: `pharmacie_db`
 --
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `abonnes`
+--
+
+CREATE TABLE `abonnes` (
+  `id` int(11) NOT NULL,
+  `nom` varchar(255) NOT NULL,
+  `telephone` varchar(50) DEFAULT NULL,
+  `adresse` varchar(255) DEFAULT NULL,
+  `entreprise_id` int(11) DEFAULT NULL,
+  `actif` tinyint(1) NOT NULL DEFAULT 1,
+  `dateCreation` datetime NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 
@@ -92,25 +108,33 @@ INSERT INTO `details_inventaire` (`id`, `inventaire_id`, `produit_id`, `quantite
 --
 -- Table structure for table `details_vente`
 --
+-- Error reading structure for table pharmacie_db.details_vente: #1932 - Table &#039;pharmacie_db.details_vente&#039; doesn&#039;t exist in engine
+-- Error reading data for table pharmacie_db.details_vente: #1064 - You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near &#039;FROM `pharmacie_db`.`details_vente`&#039; at line 1
 
-CREATE TABLE `details_vente` (
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `entreprises`
+--
+
+CREATE TABLE `entreprises` (
   `id` int(11) NOT NULL,
-  `vente_id` int(11) NOT NULL,
-  `produit_id` int(11) NOT NULL,
-  `quantite` int(11) NOT NULL,
-  `prix_unitaire` double NOT NULL,
-  `total_ligne` double NOT NULL
+  `nom` varchar(255) NOT NULL,
+  `adresse` varchar(255) DEFAULT NULL,
+  `telephone` varchar(50) DEFAULT NULL,
+  `email` varchar(255) DEFAULT NULL,
+  `contact_principal` varchar(255) DEFAULT NULL,
+  `pourcentage_reduction` double NOT NULL DEFAULT 0,
+  `actif` tinyint(1) NOT NULL DEFAULT 1,
+  `dateCreation` datetime NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `details_vente`
+-- Dumping data for table `entreprises`
 --
 
-INSERT INTO `details_vente` (`id`, `vente_id`, `produit_id`, `quantite`, `prix_unitaire`, `total_ligne`) VALUES
-(5, 10, 19, 1, 100, 100),
-(6, 11, 18, 2, 100, 200),
-(7, 12, 19, 1, 100, 100),
-(8, 12, 18, 1, 100, 100);
+INSERT INTO `entreprises` (`id`, `nom`, `adresse`, `telephone`, `email`, `contact_principal`, `pourcentage_reduction`, `actif`, `dateCreation`) VALUES
+(1, 'socodee', '', '326265654', '', '097523222', 10, 1, '2026-09-27 16:08:24');
 
 -- --------------------------------------------------------
 
@@ -133,7 +157,8 @@ CREATE TABLE `fournisseurs` (
 INSERT INTO `fournisseurs` (`id`, `nom`, `contact`, `telephone`, `adresse`) VALUES
 (5, 'shalina', NULL, '', 'Goma, birere'),
 (6, 'unique pharma', NULL, '', 'Goma, birere'),
-(7, 'moon pharma', NULL, '', 'Goma, axe birere');
+(7, 'moon pharma', NULL, '', 'Goma, axe birere'),
+(8, 'ok', NULL, '', '');
 
 -- --------------------------------------------------------
 
@@ -162,6 +187,20 @@ INSERT INTO `inventaires` (`id`, `reference`, `date_inventaire`, `utilisateur_id
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `paiements`
+--
+
+CREATE TABLE `paiements` (
+  `id` int(11) NOT NULL,
+  `vente_id` int(11) NOT NULL,
+  `montant` double NOT NULL,
+  `mode_paiement` varchar(50) DEFAULT NULL,
+  `datePaiement` datetime NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `products`
 --
 
@@ -186,8 +225,8 @@ CREATE TABLE `products` (
 --
 
 INSERT INTO `products` (`id`, `nom`, `prix_achat`, `prix_vente`, `quantite`, `stock_alerte`, `id_unite`, `description`, `dateExpiration`, `createdAt`, `updatedAt`, `categorie_id`, `fournisseur_id`) VALUES
-(18, 'amoxilline 500mg', 200, 100, 1, 5, 5, NULL, '2026-12-10', '2026-09-19 20:30:43', '2026-09-19 23:11:36', 5, 6),
-(19, 'amidol 500mg', NULL, 100, 12, 10, 6, NULL, '2027-04-14', '2026-09-19 20:50:16', '2026-09-19 23:11:36', 6, 5),
+(18, 'amoxilline 500mg', 200, 100, 0, 5, 5, NULL, '2026-12-10', '2026-09-19 20:30:43', '2026-09-23 08:13:40', 5, 6),
+(19, 'amidol 500mg', NULL, 100, 10, 10, 6, NULL, '2027-04-14', '2026-09-19 20:50:16', '2026-09-27 16:22:40', 6, 5),
 (20, 'Metro', NULL, 1500, 0, 10, 5, NULL, '2027-02-21', '2026-09-21 11:34:30', '2026-09-21 11:34:30', 5, 5);
 
 -- --------------------------------------------------------
@@ -255,9 +294,9 @@ CREATE TABLE `unite_qte` (
 --
 
 INSERT INTO `unite_qte` (`id`, `label`) VALUES
-(5, 'plaquete'),
+(7, 'ampoule'),
 (6, 'flacon'),
-(7, 'ampoule');
+(5, 'plaquete');
 
 -- --------------------------------------------------------
 
@@ -280,7 +319,7 @@ CREATE TABLE `users` (
 --
 
 INSERT INTO `users` (`id`, `name`, `email`, `password`, `role`, `createdAt`, `updatedAt`) VALUES
-(3, 'alexis senga', 'alexxngabo@gmail.com', '$2b$10$FeLrkqa/HeNPNDdcnYy9duWAlhXZ.V0C8zkwRsedZTYoD.hA4cOTm', 'pharmacien', '2026-09-13 20:37:10', '2026-09-13 20:37:10'),
+(3, 'alexis senga', 'alexxngabo@gmail.com', '$2b$10$FeLrkqa/HeNPNDdcnYy9duWAlhXZ.V0C8zkwRsedZTYoD.hA4cOTm', 'admin', '2026-09-13 20:37:10', '2026-09-13 20:37:10'),
 (4, 'samuel mb', 'samuel@gmail.com', '$2b$10$mnnv8tr966sHTJSnoDSwl.XrlyAcUhut/epYouOR2FDAbWTe2PptO', 'pharmacien', '2026-09-20 08:34:29', '2026-09-20 08:34:29');
 
 -- --------------------------------------------------------
@@ -288,27 +327,20 @@ INSERT INTO `users` (`id`, `name`, `email`, `password`, `role`, `createdAt`, `up
 --
 -- Table structure for table `vente`
 --
-
-CREATE TABLE `vente` (
-  `id` int(11) NOT NULL,
-  `nom_client` varchar(30) NOT NULL,
-  `total` double NOT NULL,
-  `dateVente` datetime NOT NULL DEFAULT current_timestamp(),
-  `user_id` int(11) NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `vente`
---
-
-INSERT INTO `vente` (`id`, `nom_client`, `total`, `dateVente`, `user_id`) VALUES
-(10, 'samuel', 100, '2026-09-19 21:31:48', 3),
-(11, 'eric', 200, '2026-09-19 22:02:37', 3),
-(12, 'client ordinaire', 200, '2026-09-19 22:03:40', 3);
+-- Error reading structure for table pharmacie_db.vente: #1932 - Table &#039;pharmacie_db.vente&#039; doesn&#039;t exist in engine
+-- Error reading data for table pharmacie_db.vente: #1064 - You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near &#039;FROM `pharmacie_db`.`vente`&#039; at line 1
 
 --
 -- Indexes for dumped tables
 --
+
+--
+-- Indexes for table `abonnes`
+--
+ALTER TABLE `abonnes`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `nom` (`nom`),
+  ADD KEY `idx_abonne_entreprise` (`entreprise_id`);
 
 --
 -- Indexes for table `approvisionnement`
@@ -334,18 +366,18 @@ ALTER TABLE `details_inventaire`
   ADD KEY `produit_id` (`produit_id`);
 
 --
--- Indexes for table `details_vente`
+-- Indexes for table `entreprises`
 --
-ALTER TABLE `details_vente`
+ALTER TABLE `entreprises`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `vente_id` (`vente_id`),
-  ADD KEY `produit_id` (`produit_id`);
+  ADD UNIQUE KEY `uq_entreprise_nom` (`nom`);
 
 --
 -- Indexes for table `fournisseurs`
 --
 ALTER TABLE `fournisseurs`
-  ADD PRIMARY KEY (`id`);
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `nom` (`nom`);
 
 --
 -- Indexes for table `inventaires`
@@ -354,6 +386,13 @@ ALTER TABLE `inventaires`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `reference` (`reference`),
   ADD KEY `utilisateur_id` (`utilisateur_id`);
+
+--
+-- Indexes for table `paiements`
+--
+ALTER TABLE `paiements`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `fk_paiement_vente` (`vente_id`);
 
 --
 -- Indexes for table `products`
@@ -384,25 +423,26 @@ ALTER TABLE `sortie_items`
 -- Indexes for table `unite_qte`
 --
 ALTER TABLE `unite_qte`
-  ADD PRIMARY KEY (`id`);
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `label` (`label`);
 
 --
 -- Indexes for table `users`
 --
 ALTER TABLE `users`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `email` (`email`);
-
---
--- Indexes for table `vente`
---
-ALTER TABLE `vente`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `user_id` (`user_id`);
+  ADD UNIQUE KEY `email` (`email`),
+  ADD UNIQUE KEY `name` (`name`);
 
 --
 -- AUTO_INCREMENT for dumped tables
 --
+
+--
+-- AUTO_INCREMENT for table `abonnes`
+--
+ALTER TABLE `abonnes`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `approvisionnement`
@@ -423,22 +463,28 @@ ALTER TABLE `details_inventaire`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
 
 --
--- AUTO_INCREMENT for table `details_vente`
+-- AUTO_INCREMENT for table `entreprises`
 --
-ALTER TABLE `details_vente`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
+ALTER TABLE `entreprises`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT for table `fournisseurs`
 --
 ALTER TABLE `fournisseurs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=58;
 
 --
 -- AUTO_INCREMENT for table `inventaires`
 --
 ALTER TABLE `inventaires`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+
+--
+-- AUTO_INCREMENT for table `paiements`
+--
+ALTER TABLE `paiements`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `products`
@@ -471,14 +517,14 @@ ALTER TABLE `users`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
--- AUTO_INCREMENT for table `vente`
---
-ALTER TABLE `vente`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
-
---
 -- Constraints for dumped tables
 --
+
+--
+-- Constraints for table `abonnes`
+--
+ALTER TABLE `abonnes`
+  ADD CONSTRAINT `fk_abonne_entreprise` FOREIGN KEY (`entreprise_id`) REFERENCES `entreprises` (`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 --
 -- Constraints for table `approvisionnement`
@@ -495,17 +541,16 @@ ALTER TABLE `details_inventaire`
   ADD CONSTRAINT `details_inventaire_ibfk_2` FOREIGN KEY (`produit_id`) REFERENCES `products` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
--- Constraints for table `details_vente`
---
-ALTER TABLE `details_vente`
-  ADD CONSTRAINT `fk_details_vente_products` FOREIGN KEY (`produit_id`) REFERENCES `products` (`id`) ON UPDATE CASCADE,
-  ADD CONSTRAINT `fk_details_vente_ventes` FOREIGN KEY (`vente_id`) REFERENCES `vente` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
-
---
 -- Constraints for table `inventaires`
 --
 ALTER TABLE `inventaires`
   ADD CONSTRAINT `inventaires_ibfk_1` FOREIGN KEY (`utilisateur_id`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+--
+-- Constraints for table `paiements`
+--
+ALTER TABLE `paiements`
+  ADD CONSTRAINT `fk_paiement_vente` FOREIGN KEY (`vente_id`) REFERENCES `vente` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `products`
@@ -527,12 +572,6 @@ ALTER TABLE `sorties`
 ALTER TABLE `sortie_items`
   ADD CONSTRAINT `fk_sortie_items_products` FOREIGN KEY (`produit_id`) REFERENCES `products` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   ADD CONSTRAINT `fk_sortie_items_sorties` FOREIGN KEY (`sortie_id`) REFERENCES `sorties` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
-
---
--- Constraints for table `vente`
---
-ALTER TABLE `vente`
-  ADD CONSTRAINT `vente_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`);
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
