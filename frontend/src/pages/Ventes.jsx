@@ -1,7 +1,12 @@
 import { useState, useRef, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getProducts } from "../api/product.api";
-import { createVente, getVentes, addItemsToVente } from "../api/vente.api";
+import {
+  createVente,
+  getVentes,
+  addItemsToVente,
+  deleteVente,
+} from "../api/vente.api";
 import { useAuth } from "../context/AuthContext";
 import Layout from "../components/Layout";
 import {
@@ -146,7 +151,6 @@ export default function Ventes() {
     const qty = parseInt(quantite);
     if (isNaN(qty) || qty <= 0) return;
 
-    // Une vente abonné exige un abonné sélectionné avant tout ajout au panier
     if (typeVente === "abonne" && !selectedAbonneId) {
       setMessage({
         type: "error",
@@ -169,7 +173,6 @@ export default function Ventes() {
       return;
     }
 
-    // Réduction héritée de l'entreprise de l'abonné (0 si vente comptant ou abonné sans entreprise)
     const reduction =
       typeVente === "abonne" && selectedAbonne?.entreprise
         ? selectedAbonne.entreprise.pourcentage_reduction
@@ -228,7 +231,7 @@ export default function Ventes() {
       setMessage({ type: "success", text: "Vente enregistrée avec succès !" });
 
       const saleDetails = {
-        id: data?.data?.id || Date.now(),
+        id: data?.data?.vente?.id || data?.data?.id || Date.now(),
         user_name: user?.name || user?.nom || "Vendeur",
         nom_client: nom_client.trim() || "Client ordinaire",
         entreprise_nom:
@@ -266,6 +269,37 @@ export default function Ventes() {
     },
   });
 
+  // Mutation pour annuler/supprimer une vente (Restitue le stock automatiquement via l'API)
+  const deleteVenteMutation = useMutation({
+    mutationFn: (id) => deleteVente(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(["ventes"]);
+      queryClient.invalidateQueries(["products"]); // Recharge les stocks car ils sont restitués
+      setMessage({
+        type: "success",
+        text: "Vente annulée et stock réajusté avec succès.",
+      });
+    },
+    onError: (err) => {
+      setMessage({
+        type: "error",
+        text:
+          err.response?.data?.message ||
+          "Erreur lors de l'annulation de la vente",
+      });
+    },
+  });
+
+  const handleDeleteVente = (id) => {
+    if (
+      window.confirm(
+        `Voulez-vous vraiment annuler la vente #${id} ? Le stock des produits sera réajusté.`,
+      )
+    ) {
+      deleteVenteMutation.mutate(id);
+    }
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (cartItems.length === 0) {
@@ -298,7 +332,7 @@ export default function Ventes() {
   const handleReprint = (vente) => {
     const saleDetails = {
       id: vente.id,
-      user_name: vente.User?.name || vente.vendeur?.name || "Vendeur",
+      user_name: vente.vendeur?.name || vente.User?.name || "Vendeur",
       nom_client: vente.nom_client || "Client ordinaire",
       entreprise_nom: vente.abonne?.entreprise?.nom || null,
       date: vente.dateMiseAJour || vente.createdAt || vente.dateVente,
@@ -331,7 +365,11 @@ export default function Ventes() {
     const query = searchTerm.trim().toLowerCase();
     return ventes.filter((vente) => {
       const clientName = (vente.nom_client || "").toLowerCase();
-      const userName = (vente.User?.name || "").toLowerCase();
+      const userName = (
+        vente.vendeur?.name ||
+        vente.User?.name ||
+        ""
+      ).toLowerCase();
       const idStr = vente.id?.toString() || "";
       return (
         clientName.includes(query) ||
@@ -982,7 +1020,7 @@ export default function Ventes() {
                           </td>
 
                           <td className="py-3.5 px-6 text-slate-600 capitalize">
-                            {vente.User?.name || vente.vendeur?.name || "N/A"}
+                            {vente.vendeur?.name || vente.User?.name || "N/A"}
                           </td>
                           <td className="py-3.5 px-6 text-right font-black text-teal-600">
                             {totalV.toLocaleString()} FC
@@ -1003,6 +1041,16 @@ export default function Ventes() {
                               >
                                 <Printer className="w-4 h-4" />
                               </button>
+                              {/* Affiché uniquement si l'utilisateur est admin */}
+                              {user?.role === "admin" && (
+                                <button
+                                  onClick={() => handleDeleteVente(vente.id)}
+                                  className="text-slate-400 hover:text-rose-600 transition-colors p-1 cursor-pointer"
+                                  title="Annuler la vente"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1073,7 +1121,6 @@ export default function Ventes() {
               Client : {selectedVente.nom_client || "Client ordinaire"}
             </p>
 
-            {/* Indicateur de réduction si la facture appartient à un abonné */}
             {selectedVente.type_vente === "abonne" &&
               (getReductionForVente(selectedVente) > 0 ? (
                 <p className="text-[11px] text-teal-600 font-semibold mb-4 flex items-center gap-1">
@@ -1090,7 +1137,6 @@ export default function Ventes() {
               ))}
 
             <div className="space-y-3">
-              {/* Select dynamique avec recherche intégrée (Modale Facture Existante) */}
               <div className="relative" ref={addDropdownRef}>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   Médicament
