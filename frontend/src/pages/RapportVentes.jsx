@@ -26,10 +26,14 @@ export default function RapportVentes() {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("journalier");
+
+  // Onglet de filtrage par type de règlement (comptant par défaut)
+  const [typeVenteTab, setTypeVenteTab] = useState("comptant");
+
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
 
-  // États pour la recherche spécifique d'un médicament et ses statistiques
+  // États pour la recherche spécifique d'un article et ses statistiques
   const [selectedMedId, setSelectedMedId] = useState("");
   const [medSearch, setMedSearch] = useState("");
   const [isMedDropdownOpen, setIsMedDropdownOpen] = useState(false);
@@ -37,16 +41,44 @@ export default function RapportVentes() {
 
   const isAdmin = user?.role?.toLowerCase() === "admin";
 
-  // Chargement des ventes
+  // Chargement des ventes avec enrichissement comptable (calcul du solde et des paiements)
   const { data: ventesData = [] } = useQuery({
     queryKey: ["ventes"],
     queryFn: async () => {
       const res = await getVentes();
-      return Array.isArray(res.data) ? res.data : res.data?.ventes || [];
+      const rawVentes = Array.isArray(res.data)
+        ? res.data
+        : res.data?.ventes || [];
+
+      // Normalisation et calcul comptable des soldes pour chaque vente
+      return rawVentes.map((vente) => {
+        const paiements = vente.paiements || [];
+        const montantPaye = paiements.reduce(
+          (sum, p) => sum + Number(p.montant || 0),
+          0,
+        );
+        const total = Number(vente.total || 0);
+        const solde = Math.max(0, total - montantPaye);
+        const typeVente = (vente.type_vente || "comptant").toLowerCase();
+
+        // Pour une vente au comptant, le payé est égal au total, solde = 0
+        const isComptant = typeVente === "comptant";
+        const finalMontantPaye = isComptant ? total : montantPaye;
+        const finalSolde = isComptant ? 0 : solde;
+        const estSoldeComplet =
+          isComptant || (typeVente === "abonne" && finalSolde === 0);
+
+        return {
+          ...vente,
+          montant_paye: finalMontantPaye,
+          solde: finalSolde,
+          estSolde: estSoldeComplet,
+        };
+      });
     },
   });
 
-  // Chargement des produits pour le select de statistiques (incluant le modèle d'unité)
+  // Chargement des produits pour le select de statistiques
   const { data: products = [] } = useQuery({
     queryKey: ["products"],
     queryFn: async () => (await getProducts()).data,
@@ -59,18 +91,18 @@ export default function RapportVentes() {
 
   const handlePrintReport = useReactToPrint({
     contentRef: reportRef,
-    documentTitle: `Rapport_Ventes_${activeTab}_${new Date().toISOString().split("T")[0]}`,
+    documentTitle: `Rapport_Comptable_Ventes_${typeVenteTab}_${activeTab}_${new Date().toISOString().split("T")[0]}`,
   });
 
   // Re-réimpression d'un reçu
   const handleReprint = (vente) => {
     const saleDetails = {
       id: vente.id,
-      user_name: vente.vendeur?.name || "Vendeur",
-      nom_client: vente.nom_client || "Client ordinaire",
+      user_name: vente.vendeur?.name || "Opérateur de saisie",
+      nom_client: vente.nom_client || "Client divers",
       date: vente.dateVente || vente.createdAt,
       items: (vente.items || []).map((item) => ({
-        nom: item.produit?.nom || "Produit",
+        nom: item.produit?.nom || "Article",
         quantite: item.quantite,
         prix_unitaire: item.prix_unitaire,
       })),
@@ -87,7 +119,7 @@ export default function RapportVentes() {
     return ventes.filter((vente) => {
       if (period === "tout") return true;
 
-      const venteDate = new Date(vente.dateVente);
+      const venteDate = new Date(vente.dateVente || vente.createdAt);
       if (isNaN(venteDate.getTime())) return false;
 
       if (period === "journalier") {
@@ -128,13 +160,41 @@ export default function RapportVentes() {
     });
   };
 
-  // Filtrage des ventes pour le tableau principal
+  // Filtrage strict respectant la logique comptable des abonnés et créances
   const filteredVentes = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
-    const periodFiltered = filterVentesByPeriod(ventesData, activeTab);
 
+    // 1. Filtrage strict par type de vente et statut d'encaissement
+    const typeFiltered = ventesData.filter((vente) => {
+      const typeVente = (vente.type_vente || "comptant").toLowerCase();
+      const estComptantPur = typeVente === "comptant";
+      const estAbonne = typeVente === "abonne";
+      const estSolde = vente.estSolde; // true si le solde dû est égal à 0
+
+      if (typeVenteTab === "comptant") {
+        // STRICT : Uniquement les ventes au comptant OU les abonnements entièrement soldés.
+        // Les abonnements non soldés sont totalement exlus d'ici.
+        return estComptantPur || (estAbonne && estSolde);
+      }
+
+      if (typeVenteTab === "credit") {
+        // STRICT : Uniquement les ventes d'abonnés qui possèdent un solde impayé (> 0).
+        return estAbonne && !estSolde;
+      }
+
+      return true; // "toutes" les opérations confondues
+    });
+
+    // 2. Filtrage par période
+    const periodFiltered = filterVentesByPeriod(typeFiltered, activeTab);
+
+    // 3. Filtrage par recherche textuelle (Client, Vendeur ou Article)
     return periodFiltered.filter((vente) => {
-      const clientName = (vente.nom_client || "").toLowerCase();
+      const clientName = (
+        vente.nom_client ||
+        vente.abonne?.nom ||
+        ""
+      ).toLowerCase();
       const vendedorName = (vente.vendeur?.name || "").toLowerCase();
       const hasMatchingProduct = (vente.items || []).some((item) =>
         (item.produit?.nom || "").toLowerCase().includes(query),
@@ -146,7 +206,7 @@ export default function RapportVentes() {
         hasMatchingProduct
       );
     });
-  }, [ventesData, activeTab, searchTerm]);
+  }, [ventesData, typeVenteTab, activeTab, searchTerm]);
 
   // Extraction à plat de toutes les lignes d'articles pour la table détaillée
   const flatRows = useMemo(() => {
@@ -159,12 +219,20 @@ export default function RapportVentes() {
             item.total_ligne || item.quantite * item.prix_unitaire;
           const beneficeT = prixVenteT - prixAchatU * item.quantite;
 
-          // Récupération dynamique du libellé de l'unité
           const uniteLabel =
             item.produit?.UniteQte?.label ||
             item.produit?.unite?.label ||
             item.produit?.unite ||
             "unité(s)";
+
+          const typeVente = (vente.type_vente || "comptant").toLowerCase();
+
+          let libelleReglement = "Vente au comptant";
+          if (typeVente === "abonne") {
+            libelleReglement = vente.estSolde
+              ? "Abonnement soldé (Intégré aux payées)"
+              : "Vente à crédit abonné (Créance active)";
+          }
 
           rows.push({
             venteId: vente.id,
@@ -172,12 +240,14 @@ export default function RapportVentes() {
             nom_produit: item.produit?.nom || "N/A",
             quantite: item.quantite,
             unite_label: uniteLabel,
-            nom_client: vente.nom_client || "Client ordinaire",
+            nom_client:
+              vente.abonne?.nom || vente.nom_client || "Client divers",
+            type_reglement: libelleReglement,
             prix_achat_u: prixAchatU,
             prix_vente_t: prixVenteT,
             benefice_t: beneficeT,
             vendeur_nom: vente.vendeur?.name || "N/A",
-            dateVente: vente.dateVente,
+            dateVente: vente.dateVente || vente.createdAt,
             rawVente: vente,
           });
         });
@@ -186,7 +256,7 @@ export default function RapportVentes() {
     return rows;
   }, [filteredVentes]);
 
-  // Calculs totaux du tableau
+  // Calculs des totaux comptables globaux du tableau
   const totals = useMemo(() => {
     return flatRows.reduce(
       (acc, row) => {
@@ -198,11 +268,23 @@ export default function RapportVentes() {
     );
   }, [flatRows]);
 
-  // Statistiques spécifiques pour le médicament sélectionné avec extraction de son modèle d'unité
+  // Statistiques analytiques spécifiques pour l'article sélectionné
   const medStats = useMemo(() => {
     if (!selectedMedId) return null;
 
-    const periodFiltered = filterVentesByPeriod(ventesData, activeTab);
+    const typeFiltered = ventesData.filter((vente) => {
+      const typeVente = (vente.type_vente || "comptant").toLowerCase();
+      const estComptantPur = typeVente === "comptant";
+      const estAbonne = typeVente === "abonne";
+      const estSolde = vente.estSolde;
+
+      if (typeVenteTab === "comptant")
+        return estComptantPur || (estAbonne && estSolde);
+      if (typeVenteTab === "credit") return estAbonne && !estSolde;
+      return true;
+    });
+
+    const periodFiltered = filterVentesByPeriod(typeFiltered, activeTab);
     let totalQty = 0;
     let totalRevenue = 0;
     let totalBenefice = 0;
@@ -238,7 +320,6 @@ export default function RapportVentes() {
       (p) => p.id === parseInt(selectedMedId, 10),
     );
 
-    // Si l'unité n'a pas été trouvée dans les ventes, on la cherche dans le produit sélectionné
     if (!unitLabel && targetProduct) {
       unitLabel =
         targetProduct.UniteQte?.label ||
@@ -248,13 +329,13 @@ export default function RapportVentes() {
     }
 
     return {
-      productName: targetProduct?.nom || "Médicament sélectionné",
+      productName: targetProduct?.nom || "Article sélectionné",
       totalQty,
       unitLabel: unitLabel || "unité(s)",
       totalRevenue,
       totalBenefice,
     };
-  }, [selectedMedId, ventesData, activeTab, products]);
+  }, [selectedMedId, ventesData, typeVenteTab, activeTab, products]);
 
   const filteredProductsForSelect = products.filter((p) =>
     p.nom?.toLowerCase().includes(medSearch.toLowerCase()),
@@ -273,10 +354,11 @@ export default function RapportVentes() {
       <div className="mb-8 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-            Rapports & Statistiques des Ventes
+            Rapport & État Financier des Ventes
           </h1>
           <p className="text-sm text-slate-500">
-            Historique détaillé et analyses par article
+            Comptabilité analytique, journal des opérations et flux de
+            trésorerie
           </p>
         </div>
 
@@ -285,34 +367,78 @@ export default function RapportVentes() {
           disabled={flatRows.length === 0}
           className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-40"
         >
-          <Printer className="w-4 h-4" /> Imprimer Rapport ({activeTab})
+          <Printer className="w-4 h-4" /> imprimer l'État Financier (
+          {typeVenteTab})
         </button>
       </div>
 
-      {/* SECTION STATISTIQUES PAR MÉDICAMENT SPÉCIFIQUE */}
+      {/* ONGLETS DE FILTRAGE PAR TYPE DE RÈGLEMENT */}
+      <div className="flex items-center gap-2 border-b border-slate-200 mb-6 overflow-x-auto pb-2">
+        <button
+          onClick={() => {
+            setTypeVenteTab("comptant");
+            setCurrentPage(1);
+          }}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            typeVenteTab === "comptant"
+              ? "bg-teal-600 text-white shadow-sm"
+              : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          Ventes payées / au comptant
+        </button>
+        <button
+          onClick={() => {
+            setTypeVenteTab("credit");
+            setCurrentPage(1);
+          }}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            typeVenteTab === "credit"
+              ? "bg-teal-600 text-white shadow-sm"
+              : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          Ventes abonnés non soldées (Créances actives)
+        </button>
+        <button
+          onClick={() => {
+            setTypeVenteTab("toutes");
+            setCurrentPage(1);
+          }}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            typeVenteTab === "toutes"
+              ? "bg-teal-600 text-white shadow-sm"
+              : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          Toutes les opérations de vente
+        </button>
+      </div>
+
+      {/* SECTION STATISTIQUES ANALYTIQUES PAR ARTICLE */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm mb-8 space-y-4">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-teal-600" /> Analyse ciblée par
-              Médicament
+              <BarChart3 className="w-5 h-5 text-teal-600" /> Analyse de
+              rentabilité par article
             </h2>
             <p className="text-xs text-slate-500">
-              Sélectionnez un médicament pour connaître les quantités vendues et
-              les bénéfices sur la période active ({activeTab})
+              Évaluation des volumes sortants et des marges bénéficiaires nettes
             </p>
           </div>
 
           <div className="text-xs font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-3 py-1.5 rounded-xl">
-            Période active : <span className="capitalize">{activeTab}</span>
+            Périmètre : <span className="capitalize">{typeVenteTab}</span> |
+            Période : <span className="capitalize">{activeTab}</span>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-          {/* Select avec recherche pour le médicament */}
+          {/* Select avec recherche pour l'article */}
           <div className="relative" ref={medDropdownRef}>
             <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-              Choisir un médicament
+              Sélectionner un article
             </label>
             <button
               type="button"
@@ -328,7 +454,7 @@ export default function RapportVentes() {
               >
                 {selectedProductObj
                   ? `${selectedProductObj.nom} (${selectedProductObj.UniteQte?.label || selectedProductObj.unite?.label || "unité"})`
-                  : "-- Sélectionnez un médicament --"}
+                  : "-- Choisir une désignation --"}
               </span>
               <div className="flex items-center gap-1 text-slate-400">
                 {selectedMedId && (
@@ -353,7 +479,7 @@ export default function RapportVentes() {
                   <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
-                    placeholder="Filtrer les médicaments..."
+                    placeholder="Filtrer les articles..."
                     value={medSearch}
                     onChange={(e) => setMedSearch(e.target.value)}
                     autoFocus
@@ -364,7 +490,7 @@ export default function RapportVentes() {
                 <div className="overflow-y-auto max-h-40 divide-y divide-slate-50">
                   {filteredProductsForSelect.length === 0 ? (
                     <div className="py-3 text-center text-xs text-slate-400">
-                      Aucun médicament trouvé
+                      Aucun article trouvé
                     </div>
                   ) : (
                     filteredProductsForSelect.map((p) => {
@@ -406,13 +532,13 @@ export default function RapportVentes() {
             )}
           </div>
 
-          {/* Affichage des Résultats Statistiques avec l'Unité réelle */}
+          {/* Affichage des Résultats Analytiques */}
           <div className="md:col-span-2 bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-wrap items-center justify-around gap-4">
             {medStats ? (
               <>
                 <div className="text-center">
                   <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                    Quantité Vendue
+                    Volume Cession
                   </p>
                   <p className="text-xl font-black text-slate-900 mt-0.5">
                     {medStats.totalQty}{" "}
@@ -424,7 +550,7 @@ export default function RapportVentes() {
                 <div className="h-8 w-px bg-slate-200 hidden sm:block"></div>
                 <div className="text-center">
                   <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                    Chiffre d'affaires
+                    Chiffre d'Affaires Brut
                   </p>
                   <p className="text-xl font-black text-teal-600 mt-0.5">
                     {medStats.totalRevenue.toLocaleString()} FC
@@ -435,7 +561,7 @@ export default function RapportVentes() {
                     <div className="h-8 w-px bg-slate-200 hidden sm:block"></div>
                     <div className="text-center">
                       <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                        Bénéfice Réalisé
+                        Marge Brute Réalisée
                       </p>
                       <p
                         className={`text-xl font-black mt-0.5 ${medStats.totalBenefice >= 0 ? "text-emerald-600" : "text-rose-600"}`}
@@ -448,21 +574,21 @@ export default function RapportVentes() {
               </>
             ) : (
               <p className="text-xs text-slate-400 italic py-2">
-                Veuillez sélectionner un médicament ci-contre pour afficher ses
-                statistiques.
+                Veuillez sélectionner un article pour afficher sa note de
+                synthèse financière.
               </p>
             )}
           </div>
         </div>
       </div>
 
-      {/* TABLEAU PRINCIPAL DES VENTES */}
+      {/* TABLEAU PRINCIPAL DES OPÉRATIONS DE VENTE */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col justify-between">
         <div>
           <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <h2 className="text-base font-bold text-slate-900 flex items-center gap-2 capitalize">
               <FileText className="w-5 h-5 text-teal-600" />
-              Détails des Ventes
+              Journal des Opérations ({typeVenteTab})
             </h2>
 
             <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
@@ -470,7 +596,7 @@ export default function RapportVentes() {
                 <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Rechercher produit, client..."
+                  placeholder="Rechercher désignation, tiers..."
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value);
@@ -480,6 +606,7 @@ export default function RapportVentes() {
                 />
               </div>
 
+              {/* Filtres de Périodes */}
               <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-semibold">
                 {[
                   "journalier",
@@ -507,18 +634,19 @@ export default function RapportVentes() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                  <th className="py-3 px-6">Produit</th>
-                  <th className="py-3 px-6">Qté</th>
-                  <th className="py-3 px-6">Client</th>
+                  <th className="py-3 px-6">Désignation de l'Article</th>
+                  <th className="py-3 px-6">Quantité</th>
+                  <th className="py-3 px-6">Client / Tiers</th>
+                  <th className="py-3 px-6">Mode de Règlement / Statut</th>
                   {isAdmin && (
                     <>
-                      <th className="py-3 px-6">P. Achat U</th>
-                      <th className="py-3 px-6">P. Vente T</th>
-                      <th className="py-3 px-6">Bénéfice T</th>
+                      <th className="py-3 px-6">Coût Unitaire (P.A)</th>
+                      <th className="py-3 px-6">Montant Brut (P.V)</th>
+                      <th className="py-3 px-6">Marge Nette</th>
                     </>
                   )}
-                  <th className="py-3 px-6">Vendu par</th>
-                  <th className="py-3 px-6">Date</th>
+                  <th className="py-3 px-6">Opérateur</th>
+                  <th className="py-3 px-6">Date de Valeur</th>
                   <th className="py-3 px-6 text-right">Action</th>
                 </tr>
               </thead>
@@ -526,15 +654,16 @@ export default function RapportVentes() {
                 {currentRows.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={isAdmin ? "9" : "6"}
+                      colSpan={isAdmin ? "10" : "7"}
                       className="py-8 text-center text-slate-400 text-sm"
                     >
-                      Aucun article vendu enregistré pour cette sélection.
+                      Aucune opération comptable enregistrée pour ce filtre.
                     </td>
                   </tr>
                 ) : (
                   currentRows.map((row, idx) => {
                     const dateObj = new Date(row.dateVente);
+                    const isSoldedCredit = row.type_reglement.includes("soldé");
 
                     return (
                       <tr
@@ -552,6 +681,19 @@ export default function RapportVentes() {
                         </td>
                         <td className="py-3.5 px-6 text-slate-700 capitalize font-medium">
                           {row.nom_client}
+                        </td>
+                        <td className="py-3.5 px-6">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-bold border ${
+                              isSoldedCredit
+                                ? "bg-teal-50 text-teal-700 border-teal-200"
+                                : row.type_reglement.includes("crédit")
+                                  ? "bg-amber-50 text-amber-700 border-amber-200"
+                                  : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            }`}
+                          >
+                            {row.type_reglement}
+                          </span>
                         </td>
                         {isAdmin && (
                           <>
@@ -586,7 +728,7 @@ export default function RapportVentes() {
                           <button
                             onClick={() => handleReprint(row.rawVente)}
                             className="text-slate-400 hover:text-teal-600 transition-colors p-1 cursor-pointer"
-                            title="Reimprimer le reçu"
+                            title="Réimprimer la pièce justificative"
                           >
                             <Printer className="w-4 h-4" />
                           </button>
@@ -599,20 +741,20 @@ export default function RapportVentes() {
 
               {flatRows.length > 0 && (
                 <tfoot>
-                  <tr className="bg-slate-100/80 border-t-2 border-slate-200 text-sm font-bold text-slate-900">
+                  <tr className="bg-slate-100/90 border-t-2 border-slate-200 text-sm font-bold text-slate-900">
                     <td
-                      colSpan={isAdmin ? "4" : "3"}
+                      colSpan={isAdmin ? "5" : "4"}
                       className="py-3.5 px-6 uppercase text-xs tracking-wider text-slate-600"
                     >
-                      Total Période ({flatRows.length} lignes)
+                      Balance Générale de la Période ({flatRows.length} lignes)
                     </td>
                     {isAdmin ? (
                       <>
-                        <td className="py-3.5 px-6 text-slate-700">
+                        <td className="py-3.5 px-6 text-slate-900">
                           {totals.totalVente.toLocaleString()} FC
                         </td>
                         <td
-                          className={`py-3.5 px-6 font-bold text-lg ${
+                          className={`py-3.5 px-6 font-bold text-base ${
                             totals.totalBenefice > 0
                               ? "text-emerald-600"
                               : totals.totalBenefice < 0
@@ -644,7 +786,7 @@ export default function RapportVentes() {
                 {Math.min(startIndex + itemsPerPage, flatRows.length)}
               </span>{" "}
               sur <span className="font-semibold">{flatRows.length}</span>{" "}
-              résultats
+              résultats enregistrés
             </span>
 
             <div className="flex items-center gap-2">
@@ -672,59 +814,81 @@ export default function RapportVentes() {
         )}
       </div>
 
-      {/* Impression masquée */}
+      {/* MODÈLE D'IMPRESSION MASQUÉ (RAPPORT COMPTABLE OFFICIEL) */}
       <div className="hidden">
         <Receipt ref={receiptRef} saleData={lastSale} />
 
         <div ref={reportRef} className="p-8 bg-white text-slate-900 font-sans">
-          <img src={Entete} alt="entete" />
-          <h2 className="text-xl font-bold mb-2">
-            Rapport des Ventes - {activeTab.toUpperCase()}
+          <img src={Entete} alt="entete" className="mx-auto max-h-16 mb-4" />
+          <h2 className="text-xl font-black uppercase tracking-wider text-center mb-1">
+            État Financier & Journal des Ventes
           </h2>
+          <p className="text-xs text-slate-500 text-center mb-6">
+            Périmètre :{" "}
+            <span className="uppercase font-bold">{typeVenteTab}</span> |
+            Période : <span className="uppercase font-bold">{activeTab}</span> |
+            Date d'édition : {new Date().toLocaleDateString("fr-FR")}
+          </p>
 
-          <table className="w-full text-left border-collapse border border-slate-200 text-xs">
+          <table className="w-full text-left border-collapse border border-slate-300 text-xs">
             <thead>
-              <tr className="bg-slate-100 border-b border-slate-200">
-                <th className="p-2 border border-slate-200">Produit</th>
-                <th className="p-2 border border-slate-200">Qté</th>
-                <th className="p-2 border border-slate-200">Client</th>
+              <tr className="bg-slate-100 border-b border-slate-300 text-[10px] font-bold uppercase">
+                <th className="p-2 border border-slate-300">
+                  Désignation Article
+                </th>
+                <th className="p-2 border border-slate-300">Qté</th>
+                <th className="p-2 border border-slate-300">
+                  Bénéficiaire / Tiers
+                </th>
+                <th className="p-2 border border-slate-300">
+                  Règlement / Statut
+                </th>
                 {isAdmin && (
                   <>
-                    <th className="p-2 border border-slate-200">P. Achat U</th>
-                    <th className="p-2 border border-slate-200">P. Vente T</th>
-                    <th className="p-2 border border-slate-200">Bénéfice T</th>
+                    <th className="p-2 border border-slate-300 text-right">
+                      P. Achat U
+                    </th>
+                    <th className="p-2 border border-slate-300 text-right">
+                      Montant Brut
+                    </th>
+                    <th className="p-2 border border-slate-300 text-right">
+                      Marge Nette
+                    </th>
                   </>
                 )}
-                <th className="p-2 border border-slate-200">Vendu par</th>
-                <th className="p-2 border border-slate-200">Date</th>
+                <th className="p-2 border border-slate-300">Opérateur</th>
+                <th className="p-2 border border-slate-300">Date</th>
               </tr>
             </thead>
             <tbody>
               {flatRows.map((row, i) => (
                 <tr key={i} className="border-b border-slate-200">
-                  <td className="p-2 border border-slate-200 capitalize">
+                  <td className="p-2 border border-slate-300 capitalize font-semibold">
                     {row.nom_produit}
                   </td>
-                  <td className="p-2 border border-slate-200 font-bold">
+                  <td className="p-2 border border-slate-300 font-bold">
                     {row.quantite} {row.unite_label}
                   </td>
-                  <td className="p-2 border border-slate-200 capitalize">
+                  <td className="p-2 border border-slate-300 capitalize">
                     {row.nom_client}
+                  </td>
+                  <td className="p-2 border border-slate-300">
+                    {row.type_reglement}
                   </td>
                   {isAdmin && (
                     <>
-                      <td className="p-2 border border-slate-200">
+                      <td className="p-2 border border-slate-300 text-right">
                         {row.prix_achat_u.toLocaleString()} FC
                       </td>
-                      <td className="p-2 border border-slate-200">
+                      <td className="p-2 border border-slate-300 text-right">
                         {row.prix_vente_t.toLocaleString()} FC
                       </td>
                       <td
-                        className={`p-2 border border-slate-200 font-semibold ${
+                        className={`p-2 border border-slate-300 text-right font-semibold ${
                           row.benefice_t > 0
-                            ? "text-emerald-600"
+                            ? "text-emerald-700"
                             : row.benefice_t < 0
-                              ? "text-rose-600"
+                              ? "text-rose-700"
                               : "text-slate-400"
                         }`}
                       >
@@ -732,10 +896,10 @@ export default function RapportVentes() {
                       </td>
                     </>
                   )}
-                  <td className="p-2 border border-slate-200 capitalize">
+                  <td className="p-2 border border-slate-300 capitalize">
                     {row.vendeur_nom}
                   </td>
-                  <td className="p-2 border border-slate-200">
+                  <td className="p-2 border border-slate-300">
                     {new Date(row.dateVente).toLocaleDateString("fr-FR")}
                   </td>
                 </tr>
@@ -743,32 +907,43 @@ export default function RapportVentes() {
             </tbody>
             {isAdmin && (
               <tfoot>
-                <tr className="bg-slate-100 font-bold">
+                <tr className="bg-slate-100 font-bold text-xs">
                   <td
-                    colSpan="4"
-                    className="p-2 border border-slate-200 uppercase"
+                    colSpan="5"
+                    className="p-2 border border-slate-300 uppercase"
                   >
-                    Totaux
+                    Totaux Généraux / Balance Comptable
                   </td>
-                  <td className="p-2 border border-slate-200">
+                  <td className="p-2 border border-slate-300 text-right">
                     {totals.totalVente.toLocaleString()} FC
                   </td>
                   <td
-                    className={`p-2 border border-slate-200 ${
+                    className={`p-2 border border-slate-300 text-right ${
                       totals.totalBenefice > 0
-                        ? "text-emerald-600"
+                        ? "text-emerald-700"
                         : totals.totalBenefice < 0
-                          ? "text-rose-600"
+                          ? "text-rose-700"
                           : "text-slate-400"
                     }`}
                   >
                     {totals.totalBenefice.toLocaleString()} FC
                   </td>
-                  <td colSpan="2" className="p-2 border border-slate-200"></td>
+                  <td colSpan="2" className="p-2 border border-slate-300"></td>
                 </tr>
               </tfoot>
             )}
           </table>
+
+          <div className="grid grid-cols-2 gap-8 text-xs mt-12 pt-8 border-t border-slate-200">
+            <div className="text-center">
+              <p className="font-bold mb-12">Le Service Comptabilité</p>
+              <div className="border-b border-slate-400 w-48 mx-auto"></div>
+            </div>
+            <div className="text-center">
+              <p className="font-bold mb-12">Visa de la Direction / Gérance</p>
+              <div className="border-b border-slate-400 w-48 mx-auto"></div>
+            </div>
+          </div>
         </div>
       </div>
     </Layout>
