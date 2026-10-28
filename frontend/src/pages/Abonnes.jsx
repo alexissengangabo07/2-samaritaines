@@ -116,6 +116,18 @@ export default function Abonnes() {
     },
   });
 
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!form.nom.trim()) {
+      setMessage({ type: "error", text: "Le nom est obligatoire." });
+      return;
+    }
+    saveMutation.mutate({
+      ...form,
+      entreprise_id: form.entreprise_id || null,
+    });
+  };
+
   return (
     <Layout>
       <div className="mb-8 flex flex-col md:flex-row justify-between md:items-center gap-4">
@@ -365,6 +377,88 @@ export default function Abonnes() {
       {showModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           {/* ... Formulaire d'abonné principal ... */}
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
+            <button
+              onClick={() => setShowModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h2 className="text-base font-bold text-slate-900 mb-4">
+              {editingAbonne ? "Modifier l'abonné" : "Nouvel abonné"}
+            </h2>
+
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Nom complet
+                </label>
+                <input
+                  type="text"
+                  value={form.nom}
+                  onChange={(e) => setForm({ ...form, nom: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Téléphone (optionnel)
+                </label>
+                <input
+                  type="text"
+                  value={form.telephone}
+                  onChange={(e) =>
+                    setForm({ ...form, telephone: e.target.value })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Adresse (optionnel)
+                </label>
+                <input
+                  type="text"
+                  value={form.adresse}
+                  onChange={(e) =>
+                    setForm({ ...form, adresse: e.target.value })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Entreprise qui prend en charge (optionnel)
+                </label>
+                <select
+                  value={form.entreprise_id}
+                  onChange={(e) =>
+                    setForm({ ...form, entreprise_id: e.target.value })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                >
+                  <option value="">-- Aucune (abonné individuel) --</option>
+                  {entreprises.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.nom} (-{e.pourcentage_reduction}%)
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  La réduction appliquée sera automatiquement celle de
+                  l'entreprise choisie.
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                disabled={saveMutation.isLoading}
+                className="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2.5 rounded-xl text-xs disabled:opacity-50 cursor-pointer"
+              >
+                {saveMutation.isLoading ? "Enregistrement..." : "Enregistrer"}
+              </button>
+            </form>
+          </div>
         </div>
       )}
     </Layout>
