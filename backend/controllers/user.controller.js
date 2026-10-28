@@ -1,16 +1,17 @@
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const { User, Vente, Approvisionnement, Product } = require('../models');
-const { estExpire, DATE_EXPIRATION } = require('../config/license');
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const { User, Vente, Approvisionnement, Product } = require("../models");
+const { estExpire, DATE_EXPIRATION } = require("../config/license");
 
-const JWT_SECRET = process.env.JWT_SECRET || 'votre_cle_secrete_super_securisee';
+const JWT_SECRET =
+  process.env.JWT_SECRET || "votre_cle_secrete_super_securisee";
 
 // AUTH: Connexion d'un utilisateur (Login)
 exports.login = async (req, res) => {
   if (estExpire()) {
     return res.status(403).json({
-      code: 'LICENSE_EXPIRED',
-      message: `L'accès à cette application a expiré le ${DATE_EXPIRATION.toLocaleDateString('fr-FR')}.`
+      code: "LICENSE_EXPIRED",
+      message: `L'accès à cette application a expiré le ${DATE_EXPIRATION.toLocaleDateString("fr-FR")}.`,
     });
   }
   try {
@@ -32,7 +33,7 @@ exports.login = async (req, res) => {
     const token = jwt.sign(
       { id: user.id, role: user.role, email: user.email },
       JWT_SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: "24h" },
     );
 
     // Exclure le mot de passe du retour
@@ -42,10 +43,13 @@ exports.login = async (req, res) => {
     res.status(200).json({
       message: "Connexion réussie",
       token,
-      user: userWithoutPassword
+      user: userWithoutPassword,
     });
   } catch (error) {
-    res.status(500).json({ message: "Erreur lors de la connexion", error: error.message });
+    console.log(error);
+    res
+      .status(500)
+      .json({ message: "Erreur lors de la connexion", error: error.message });
   }
 };
 
@@ -53,11 +57,14 @@ exports.login = async (req, res) => {
 exports.getAllUsers = async (req, res) => {
   try {
     const users = await User.findAll({
-      attributes: { exclude: ['password'] }
+      attributes: { exclude: ["password"] },
     });
     res.status(200).json(users);
   } catch (error) {
-    res.status(500).json({ message: "Erreur lors de la récupération des utilisateurs", error: error.message });
+    res.status(500).json({
+      message: "Erreur lors de la récupération des utilisateurs",
+      error: error.message,
+    });
   }
 };
 
@@ -65,20 +72,21 @@ exports.getAllUsers = async (req, res) => {
 exports.getUserById = async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id, {
-      attributes: { exclude: ['password'] },
+      attributes: { exclude: ["password"] },
       include: [
         {
           model: Vente,
-          include: [{ model: Product, attributes: ['nom', 'prix_vente'] }]
+          include: [{ model: Product, attributes: ["nom", "prix_vente"] }],
         },
         {
           model: Approvisionnement,
-          include: [{ model: Product, attributes: ['nom'] }]
-        }
-      ]
+          include: [{ model: Product, attributes: ["nom"] }],
+        },
+      ],
     });
 
-    if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
+    if (!user)
+      return res.status(404).json({ message: "Utilisateur non trouvé" });
     res.status(200).json(user);
   } catch (error) {
     res.status(500).json({ message: "Erreur serveur", error: error.message });
@@ -103,15 +111,20 @@ exports.createUser = async (req, res) => {
       name,
       email,
       password: hashedPassword,
-      role: role || 'assistant'
+      role: role || "assistant",
     });
 
     const responseUser = newUser.toJSON();
     delete responseUser.password;
 
-    res.status(201).json({ message: "Utilisateur créé avec succès", user: responseUser });
+    res
+      .status(201)
+      .json({ message: "Utilisateur créé avec succès", user: responseUser });
   } catch (error) {
-    res.status(400).json({ message: "Erreur lors de la création de l'utilisateur", error: error.message });
+    res.status(400).json({
+      message: "Erreur lors de la création de l'utilisateur",
+      error: error.message,
+    });
   }
 };
 
@@ -122,7 +135,8 @@ exports.updateUser = async (req, res) => {
     const { name, email, role, password } = req.body;
 
     const user = await User.findByPk(id);
-    if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
+    if (!user)
+      return res.status(404).json({ message: "Utilisateur non trouvé" });
 
     if (name) user.name = name;
     if (email) user.email = email;
@@ -139,9 +153,14 @@ exports.updateUser = async (req, res) => {
     const updatedUser = user.toJSON();
     delete updatedUser.password;
 
-    res.status(200).json({ message: "Utilisateur mis à jour avec succès", user: updatedUser });
+    res.status(200).json({
+      message: "Utilisateur mis à jour avec succès",
+      user: updatedUser,
+    });
   } catch (error) {
-    res.status(400).json({ message: "Erreur lors de la mise à jour", error: error.message });
+    res
+      .status(400)
+      .json({ message: "Erreur lors de la mise à jour", error: error.message });
   }
 };
 
@@ -149,19 +168,23 @@ exports.updateUser = async (req, res) => {
 exports.deleteUser = async (req, res) => {
   try {
     const deleted = await User.destroy({ where: { id: req.params.id } });
-    if (!deleted) return res.status(404).json({ message: "Utilisateur non trouvé" });
+    if (!deleted)
+      return res.status(404).json({ message: "Utilisateur non trouvé" });
     res.status(200).json({ message: "Utilisateur supprimé avec succès" });
   } catch (error) {
-    res.status(500).json({ message: "Erreur lors de la suppression", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Erreur lors de la suppression", error: error.message });
   }
 };
 
 exports.getMe = async (req, res) => {
   try {
     const user = await User.findByPk(req.user.id, {
-      attributes: { exclude: ['password'] }
+      attributes: { exclude: ["password"] },
     });
-    if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
+    if (!user)
+      return res.status(404).json({ message: "Utilisateur non trouvé" });
     res.status(200).json(user);
   } catch (error) {
     res.status(500).json({ message: "Erreur serveur", error: error.message });
