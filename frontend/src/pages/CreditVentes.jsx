@@ -11,6 +11,7 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  Calendar,
 } from "lucide-react";
 import { useReactToPrint } from "react-to-print";
 import Entete from "../assets/entete.png";
@@ -22,6 +23,9 @@ export default function CreditVentes() {
   const [montant, setMontant] = useState("");
   const [modePaiement, setModePaiement] = useState("");
   const [message, setMessage] = useState({ type: "", text: "" });
+
+  // États pour les onglets de période ('all', 'today', 'week', 'month', 'year')
+  const [activeTab, setActiveTab] = useState("all");
 
   // États pour la recherche et la pagination
   const [searchTerm, setSearchTerm] = useState("");
@@ -40,12 +44,43 @@ export default function CreditVentes() {
     documentTitle: `Rapport_Ventes_Credit_${new Date().toISOString().split("T")[0]}`,
   });
 
-  // Filtrage des données selon la recherche
+  // Filtrage combiné : par dateVente (onglets) puis par Texte (recherche)
   const filteredVentes = useMemo(() => {
-    const query = searchTerm.trim().toLowerCase();
-    if (!query) return ventesCredit;
+    const now = new Date();
 
-    return ventesCredit.filter((vente) => {
+    // 1. Filtrage par onglet de période basé sur dateVente
+    const periodFiltered = ventesCredit.filter((vente) => {
+      // Utilisation de dateVente (avec repli sur createdAt si besoin)
+      const dateRef = vente.dateVente || vente.createdAt;
+      if (!dateRef) return true;
+      const venteDate = new Date(dateRef);
+
+      if (activeTab === "today") {
+        return venteDate.toDateString() === now.toDateString();
+      }
+      if (activeTab === "week") {
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay());
+        startOfWeek.setHours(0, 0, 0, 0);
+        return venteDate >= startOfWeek;
+      }
+      if (activeTab === "month") {
+        return (
+          venteDate.getMonth() === now.getMonth() &&
+          venteDate.getFullYear() === now.getFullYear()
+        );
+      }
+      if (activeTab === "year") {
+        return venteDate.getFullYear() === now.getFullYear();
+      }
+      return true; // 'all'
+    });
+
+    // 2. Filtrage par recherche textuelle
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) return periodFiltered;
+
+    return periodFiltered.filter((vente) => {
       const factureId = `#${vente.id}`.toLowerCase();
       const abonneNom = (
         vente.abonne?.nom ||
@@ -60,7 +95,7 @@ export default function CreditVentes() {
         entrepriseNom.includes(query)
       );
     });
-  }, [ventesCredit, searchTerm]);
+  }, [ventesCredit, activeTab, searchTerm]);
 
   // Calcul de la pagination
   const totalPages = Math.ceil(filteredVentes.length / ITEMS_PER_PAGE);
@@ -70,7 +105,7 @@ export default function CreditVentes() {
     startIndex + ITEMS_PER_PAGE,
   );
 
-  // Calcul des totaux globaux comptables sur l'ensemble filtré
+  // Calcul des totaux globaux comptables sur l'ensemble filtré (période + recherche)
   const totauxComptables = useMemo(() => {
     return filteredVentes.reduce(
       (acc, vente) => {
@@ -184,7 +219,76 @@ export default function CreditVentes() {
         </div>
       )}
 
-      {/* Barre de recherche */}
+      {/* Barre d'onglets de filtrage par période */}
+      <div className="flex items-center gap-2 border-b border-slate-200 mb-6 overflow-x-auto pb-1">
+        <button
+          onClick={() => {
+            setActiveTab("all");
+            setCurrentPage(1);
+          }}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            activeTab === "all"
+              ? "bg-slate-900 text-white shadow-sm"
+              : "text-slate-600 hover:bg-slate-100"
+          }`}
+        >
+          Tous ({ventesCredit.length})
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab("today");
+            setCurrentPage(1);
+          }}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            activeTab === "today"
+              ? "bg-slate-900 text-white shadow-sm"
+              : "text-slate-600 hover:bg-slate-100"
+          }`}
+        >
+          Aujourd'hui
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab("week");
+            setCurrentPage(1);
+          }}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            activeTab === "week"
+              ? "bg-slate-900 text-white shadow-sm"
+              : "text-slate-600 hover:bg-slate-100"
+          }`}
+        >
+          Cette semaine
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab("month");
+            setCurrentPage(1);
+          }}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            activeTab === "month"
+              ? "bg-slate-900 text-white shadow-sm"
+              : "text-slate-600 hover:bg-slate-100"
+          }`}
+        >
+          Ce mois
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab("year");
+            setCurrentPage(1);
+          }}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            activeTab === "year"
+              ? "bg-slate-900 text-white shadow-sm"
+              : "text-slate-600 hover:bg-slate-100"
+          }`}
+        >
+          Cette année
+        </button>
+      </div>
+
+      {/* Champ de recherche */}
       <div className="mb-4 relative max-w-sm">
         <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
         <input
@@ -206,6 +310,7 @@ export default function CreditVentes() {
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                 <th className="py-3 px-6">N° Facture</th>
+                <th className="py-3 px-6">Date</th>
                 <th className="py-3 px-6">Abonné</th>
                 <th className="py-3 px-6">Entreprise (Tiers)</th>
                 <th className="py-3 px-6 text-right">Montant Brut (Facturé)</th>
@@ -221,55 +326,67 @@ export default function CreditVentes() {
               {currentVentes.length === 0 ? (
                 <tr>
                   <td
-                    colSpan="8"
+                    colSpan="9"
                     className="py-8 text-center text-slate-400 text-sm"
                   >
-                    Aucune vente à crédit ne correspond à votre recherche.
+                    Aucune vente à crédit ne correspond à vos filtres.
                   </td>
                 </tr>
               ) : (
-                currentVentes.map((vente) => (
-                  <tr key={vente.id} className="hover:bg-slate-50/50">
-                    <td className="py-3.5 px-6 font-semibold text-slate-900">
-                      #{vente.id}
-                    </td>
-                    <td className="py-3.5 px-6 text-slate-700 capitalize">
-                      {vente.abonne?.nom || vente.nom_client}
-                    </td>
-                    <td className="py-3.5 px-6 text-slate-500">
-                      {vente.abonne?.entreprise?.nom || "—"}
-                    </td>
-                    <td className="py-3.5 px-6 text-right">
-                      {vente.total.toLocaleString()} FC
-                    </td>
-                    <td className="py-3.5 px-6 text-right text-emerald-600 font-semibold">
-                      {vente.montant_paye.toLocaleString()} FC
-                    </td>
-                    <td className="py-3.5 px-6 text-right text-rose-600 font-bold">
-                      {vente.solde.toLocaleString()} FC
-                    </td>
-                    <td className="py-3.5 px-6 text-center">
-                      {statutBadge(vente.statut_paiement)}
-                    </td>
-                    <td className="py-3.5 px-6 text-right">
-                      {vente.solde > 0 && (
-                        <button
-                          onClick={() => openPaiementModal(vente)}
-                          className="flex items-center gap-1.5 bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100 px-3 py-1.5 rounded-lg text-[11px] font-bold ml-auto cursor-pointer"
-                        >
-                          <Wallet className="w-3.5 h-3.5" /> Encaisser
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))
+                currentVentes.map((vente) => {
+                  const dateVenteFormatee = vente.dateVente
+                    ? new Date(vente.dateVente).toLocaleDateString("fr-FR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                      })
+                    : "—";
+                  return (
+                    <tr key={vente.id} className="hover:bg-slate-50/50">
+                      <td className="py-3.5 px-6 font-semibold text-slate-900">
+                        #{vente.id}
+                      </td>
+                      <td className="py-3.5 px-6 text-xs text-slate-500">
+                        {dateVenteFormatee}
+                      </td>
+                      <td className="py-3.5 px-6 text-slate-700 capitalize">
+                        {vente.abonne?.nom || vente.nom_client}
+                      </td>
+                      <td className="py-3.5 px-6 text-slate-500">
+                        {vente.abonne?.entreprise?.nom || "—"}
+                      </td>
+                      <td className="py-3.5 px-6 text-right">
+                        {vente.total.toLocaleString()} FC
+                      </td>
+                      <td className="py-3.5 px-6 text-right text-emerald-600 font-semibold">
+                        {vente.montant_paye.toLocaleString()} FC
+                      </td>
+                      <td className="py-3.5 px-6 text-right text-rose-600 font-bold">
+                        {vente.solde.toLocaleString()} FC
+                      </td>
+                      <td className="py-3.5 px-6 text-center">
+                        {statutBadge(vente.statut_paiement)}
+                      </td>
+                      <td className="py-3.5 px-6 text-right">
+                        {vente.solde > 0 && (
+                          <button
+                            onClick={() => openPaiementModal(vente)}
+                            className="flex items-center gap-1.5 bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100 px-3 py-1.5 rounded-lg text-[11px] font-bold ml-auto cursor-pointer"
+                          >
+                            <Wallet className="w-3.5 h-3.5" /> Encaisser
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
             {filteredVentes.length > 0 && (
               <tfoot>
                 <tr className="bg-slate-100/90 border-t-2 border-slate-200 text-sm font-bold text-slate-900">
                   <td
-                    colSpan="3"
+                    colSpan="4"
                     className="py-3.5 px-6 uppercase text-xs tracking-wider text-slate-600"
                   >
                     Totaux Généraux / Balance des Comptes
@@ -415,6 +532,7 @@ export default function CreditVentes() {
             <thead>
               <tr className="bg-slate-100 border-b border-slate-300 text-[10px] font-bold uppercase">
                 <th className="p-2 border border-slate-300">N°</th>
+                <th className="p-2 border border-slate-300">Date</th>
                 <th className="p-2 border border-slate-300">Abonné</th>
                 <th className="p-2 border border-slate-300">
                   Entreprise (Tiers)
@@ -434,40 +552,52 @@ export default function CreditVentes() {
               </tr>
             </thead>
             <tbody>
-              {filteredVentes.map((vente) => (
-                <tr key={vente.id} className="border-b border-slate-200">
-                  <td className="p-2 border border-slate-300 font-semibold">
-                    #{vente.id}
-                  </td>
-                  <td className="p-2 border border-slate-300 capitalize">
-                    {vente.abonne?.nom || vente.nom_client}
-                  </td>
-                  <td className="p-2 border border-slate-300 text-slate-600">
-                    {vente.abonne?.entreprise?.nom || "—"}
-                  </td>
-                  <td className="p-2 border border-slate-300 text-right">
-                    {vente.total.toLocaleString()} FC
-                  </td>
-                  <td className="p-2 border border-slate-300 text-right text-emerald-700">
-                    {vente.montant_paye.toLocaleString()} FC
-                  </td>
-                  <td className="p-2 border border-slate-300 text-right font-bold text-rose-700">
-                    {vente.solde.toLocaleString()} FC
-                  </td>
-                  <td className="p-2 border border-slate-300 text-center uppercase text-[9px] font-bold">
-                    {vente.statut_paiement === "payé"
-                      ? "Soldé"
-                      : vente.statut_paiement === "partiel"
-                        ? "Partiel"
-                        : "Non payé"}
-                  </td>
-                </tr>
-              ))}
+              {filteredVentes.map((vente) => {
+                const dateVenteFormatee = vente.dateVente
+                  ? new Date(vente.dateVente).toLocaleDateString("fr-FR", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                    })
+                  : "—";
+                return (
+                  <tr key={vente.id} className="border-b border-slate-200">
+                    <td className="p-2 border border-slate-300 font-semibold">
+                      #{vente.id}
+                    </td>
+                    <td className="p-2 border border-slate-300 text-slate-600">
+                      {dateVenteFormatee}
+                    </td>
+                    <td className="p-2 border border-slate-300 capitalize">
+                      {vente.abonne?.nom || vente.nom_client}
+                    </td>
+                    <td className="p-2 border border-slate-300 text-slate-600">
+                      {vente.abonne?.entreprise?.nom || "—"}
+                    </td>
+                    <td className="p-2 border border-slate-300 text-right">
+                      {vente.total.toLocaleString()} FC
+                    </td>
+                    <td className="p-2 border border-slate-300 text-right text-emerald-700">
+                      {vente.montant_paye.toLocaleString()} FC
+                    </td>
+                    <td className="p-2 border border-slate-300 text-right font-bold text-rose-700">
+                      {vente.solde.toLocaleString()} FC
+                    </td>
+                    <td className="p-2 border border-slate-300 text-center uppercase text-[9px] font-bold">
+                      {vente.statut_paiement === "payé"
+                        ? "Soldé"
+                        : vente.statut_paiement === "partiel"
+                          ? "Partiel"
+                          : "Non payé"}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
             <tfoot>
               <tr className="bg-slate-100 font-bold text-xs">
                 <td
-                  colSpan="3"
+                  colSpan="4"
                   className="p-2 border border-slate-300 uppercase"
                 >
                   Totaux Généraux
@@ -481,7 +611,7 @@ export default function CreditVentes() {
                 <td className="p-2 border border-slate-300 text-right text-rose-700">
                   {totauxComptables.totalSoldeDu.toLocaleString()} FC
                 </td>
-                <td className="p-2 border border-slate-300"></td>
+                <td className="p-2 border border-slate-300" colSpan="2"></td>
               </tr>
             </tfoot>
           </table>
