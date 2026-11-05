@@ -33,7 +33,7 @@ exports.login = async (req, res) => {
     const token = jwt.sign(
       { id: user.id, role: user.role, email: user.email },
       JWT_SECRET,
-      { expiresIn: "24h" },
+      { expiresIn: "72h" },
     );
 
     // Exclure le mot de passe du retour
