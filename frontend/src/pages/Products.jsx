@@ -19,7 +19,12 @@ import {
   ChevronRight,
   ChevronDown,
   Check,
+  ClipboardList,
+  Printer,
+  Trash2,
 } from "lucide-react";
+import { useReactToPrint } from "react-to-print";
+import Entete from "../assets/entete.png";
 
 export default function Products() {
   const queryClient = useQueryClient();
@@ -28,6 +33,22 @@ export default function Products() {
   const [errorMsg, setErrorMsg] = useState("");
   const [activeTab, setActiveTab] = useState("all");
   const [editingProduct, setEditingProduct] = useState(null);
+
+  // États pour la Réquisition d'approvisionnement avec persistance localStorage
+  const [requisitionItems, setRequisitionItems] = useState(() => {
+    const saved = localStorage.getItem("pharmacie_requisition");
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [isRequisitionModalOpen, setIsRequisitionModalOpen] = useState(false);
+  const requisitionPrintRef = useRef();
+
+  // Sauvegarde automatique dans le localStorage à chaque modification de la réquisition
+  useEffect(() => {
+    localStorage.setItem(
+      "pharmacie_requisition",
+      JSON.stringify(requisitionItems),
+    );
+  }, [requisitionItems]);
 
   // États pour les Selects personnalisés avec filtres
   const [catSearch, setCatSearch] = useState("");
@@ -47,7 +68,7 @@ export default function Products() {
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 5;
 
-  // État du formulaire
+  // État du formulaire produit
   const [formData, setFormData] = useState({
     nom: "",
     description: "",
@@ -82,6 +103,12 @@ export default function Products() {
     queryFn: async () => (await getUnites()).data,
   });
 
+  // Impression du bon de réquisition
+  const handlePrintRequisition = useReactToPrint({
+    contentRef: requisitionPrintRef,
+    documentTitle: `Bon_De_Requisition_${new Date().toISOString().split("T")[0]}`,
+  });
+
   // Fermer les menus déroulants lors du clic à l'extérieur
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -107,6 +134,54 @@ export default function Products() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Gestion de la liste de réquisition
+  const handleAddToRequisition = (product) => {
+    const existing = requisitionItems.find((item) => item.id === product.id);
+    const suggestedQty = Math.max(
+      (product.stock_alerte || 5) * 2 - product.quantite,
+      10,
+    );
+
+    if (existing) {
+      setRequisitionItems(
+        requisitionItems.map((item) =>
+          item.id === product.id
+            ? { ...item, qteDemandee: item.qteDemandee + 1 }
+            : item,
+        ),
+      );
+    } else {
+      setRequisitionItems([
+        ...requisitionItems,
+        {
+          id: product.id,
+          nom: product.nom,
+          unite: product.Unite?.nom || product.Unite?.label || "unité(s)",
+          stockActuel: product.quantite,
+          stockAlerte: product.stock_alerte,
+          fournisseur: product.Fournisseur?.nom || "Non spécifié",
+          qteDemandee: suggestedQty,
+        },
+      ]);
+    }
+  };
+
+  const handleRemoveFromRequisition = (productId) => {
+    setRequisitionItems(
+      requisitionItems.filter((item) => item.id !== productId),
+    );
+  };
+
+  const handleQuantityChange = (productId, newQty) => {
+    const val = parseInt(newQty, 10);
+    if (isNaN(val) || val <= 0) return;
+    setRequisitionItems(
+      requisitionItems.map((item) =>
+        item.id === productId ? { ...item, qteDemandee: val } : item,
+      ),
+    );
+  };
 
   // Filtrage pour les listes déroulantes personnalisées
   const filteredCategories = categories.filter((c) =>
@@ -208,14 +283,10 @@ export default function Products() {
 
     const formatDateForInput = (dateStr) => {
       if (!dateStr || dateStr.startsWith("0000-00-00")) return "";
-
       const d = new Date(dateStr);
       if (isNaN(d.getTime())) return "";
-
       return d.toISOString().split("T")[0];
     };
-
-    const formattedDate = formatDateForInput(product.dateExpiration);
 
     setFormData({
       nom: product.nom || "",
@@ -223,7 +294,7 @@ export default function Products() {
       prix_vente: product.prix_vente !== undefined ? product.prix_vente : "",
       quantite: product.quantite !== undefined ? product.quantite : "",
       stock_alerte: product.stock_alerte || 5,
-      dateExpiration: formattedDate,
+      dateExpiration: formatDateForInput(product.dateExpiration),
       id_categorie: product.categorie_id || product.Category?.id || "",
       id_fournisseur: product.fournisseur_id || product.Fournisseur?.id || "",
       id_unite: product.id_unite || product.Unite?.id || "",
@@ -281,8 +352,7 @@ export default function Products() {
     const expiryDate = new Date(expiryDateStr);
     const today = new Date();
     const ninetyDaysInMs = 90 * 24 * 60 * 60 * 1000;
-    const diffTime = expiryDate.getTime() - today.getTime();
-    return diffTime <= ninetyDaysInMs;
+    return expiryDate.getTime() - today.getTime() <= ninetyDaysInMs;
   };
 
   const filteredProducts = products.filter((p) => {
@@ -291,35 +361,17 @@ export default function Products() {
       .includes(searchTerm.toLowerCase());
     if (!matchesSearch) return false;
 
-    if (activeTab === "low_stock") {
-      return p.quantite <= p.stock_alerte;
-    }
-
-    if (activeTab === "expiring") {
-      return isExpiringSoon(p.dateExpiration);
-    }
-
+    if (activeTab === "low_stock") return p.quantite <= p.stock_alerte;
+    if (activeTab === "expiring") return isExpiringSoon(p.dateExpiration);
     return true;
   });
 
-  // Calculs pour la pagination
   const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const paginatedProducts = filteredProducts.slice(
     startIndex,
     startIndex + ITEMS_PER_PAGE,
   );
-
-  // Gestion de la recherche et des filtres
-  const handleSearchChange = (e) => {
-    setSearchTerm(e.target.value);
-    setCurrentPage(1);
-  };
-
-  const handleTabChange = (tab) => {
-    setActiveTab(tab);
-    setCurrentPage(1);
-  };
 
   const lowStockCount = products.filter(
     (p) => p.quantite <= p.stock_alerte,
@@ -343,19 +395,37 @@ export default function Products() {
           </p>
         </div>
 
-        <button
-          onClick={handleOpenCreateModal}
-          className="inline-flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-all text-sm cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          Ajouter un produit
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsRequisitionModalOpen(true)}
+            className="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-all text-sm cursor-pointer relative"
+          >
+            <ClipboardList className="w-4 h-4" />
+            Réquisition d'approvisionnement
+            {requisitionItems.length > 0 && (
+              <span className="absolute -top-2 -right-2 bg-rose-600 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
+                {requisitionItems.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={handleOpenCreateModal}
+            className="inline-flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-all text-sm cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            Ajouter un produit
+          </button>
+        </div>
       </div>
 
       {/* Barre d'onglets */}
       <div className="flex items-center gap-2 border-b border-slate-200 mb-6 overflow-x-auto pb-1">
         <button
-          onClick={() => handleTabChange("all")}
+          onClick={() => {
+            setActiveTab("all");
+            setCurrentPage(1);
+          }}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${
             activeTab === "all"
               ? "bg-slate-900 text-white shadow-sm"
@@ -371,7 +441,10 @@ export default function Products() {
         </button>
 
         <button
-          onClick={() => handleTabChange("expiring")}
+          onClick={() => {
+            setActiveTab("expiring");
+            setCurrentPage(1);
+          }}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${
             activeTab === "expiring"
               ? "bg-rose-600 text-white shadow-sm"
@@ -390,7 +463,10 @@ export default function Products() {
         </button>
 
         <button
-          onClick={() => handleTabChange("low_stock")}
+          onClick={() => {
+            setActiveTab("low_stock");
+            setCurrentPage(1);
+          }}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${
             activeTab === "low_stock"
               ? "bg-amber-500 text-white shadow-sm"
@@ -416,7 +492,10 @@ export default function Products() {
           type="text"
           placeholder="Rechercher un médicament..."
           value={searchTerm}
-          onChange={handleSearchChange}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setCurrentPage(1);
+          }}
           className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
         />
       </div>
@@ -459,6 +538,9 @@ export default function Products() {
                   paginatedProducts.map((product) => {
                     const isLowStock = product.quantite <= product.stock_alerte;
                     const isExpiring = isExpiringSoon(product.dateExpiration);
+                    const isInRequisition = requisitionItems.some(
+                      (item) => item.id === product.id,
+                    );
 
                     return (
                       <tr
@@ -529,11 +611,24 @@ export default function Products() {
                         <td className="py-4 px-6 text-slate-600">
                           {product.Fournisseur?.nom || "N/A"}
                         </td>
-                        <td className="py-4 px-6 text-right">
+                        <td className="py-4 px-6 text-right space-x-2">
+                          <button
+                            onClick={() => handleAddToRequisition(product)}
+                            title="Ajouter au bon de réquisition"
+                            className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors shadow-sm cursor-pointer ${
+                              isInRequisition
+                                ? "bg-amber-50 text-amber-700 border-amber-200"
+                                : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-amber-50 hover:text-amber-700"
+                            }`}
+                          >
+                            <ClipboardList className="w-3.5 h-3.5" />
+                            {isInRequisition ? "Ajouté" : "Réquisitionner"}
+                          </button>
+
                           <button
                             onClick={() => handleOpenEditModal(product)}
                             title="Modifier le produit"
-                            className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 hover:text-teal-600 transition-colors shadow-sm cursor-pointer"
+                            className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 hover:text-teal-600 transition-colors shadow-sm cursor-pointer"
                           >
                             <Edit className="w-3.5 h-3.5" />
                             Éditer
@@ -574,23 +669,19 @@ export default function Products() {
                       setCurrentPage((prev) => Math.max(prev - 1, 1))
                     }
                     disabled={currentPage === 1}
-                    className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white transition-colors cursor-pointer disabled:cursor-not-allowed"
-                    title="Page précédente"
+                    className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 transition-colors cursor-pointer"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
-
                   <span className="text-xs font-bold text-slate-700 px-2">
                     Page {currentPage} sur {totalPages || 1}
                   </span>
-
                   <button
                     onClick={() =>
                       setCurrentPage((prev) => Math.min(prev + 1, totalPages))
                     }
                     disabled={currentPage === totalPages || totalPages === 0}
-                    className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-white transition-colors cursor-pointer disabled:cursor-not-allowed"
-                    title="Page suivante"
+                    className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 transition-colors cursor-pointer"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>
@@ -599,6 +690,205 @@ export default function Products() {
             )}
           </>
         )}
+      </div>
+
+      {/* MODAL DE GESTION & IMPRESSION DE LA RÉQUISITION */}
+      {isRequisitionModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-2xl w-full p-6 relative max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+              <div className="flex items-center gap-2">
+                <ClipboardList className="w-5 h-5 text-amber-600" />
+                <h2 className="text-lg font-bold text-slate-900">
+                  Bon de Réquisition pour Réapprovisionnement
+                </h2>
+              </div>
+              <button
+                onClick={() => setIsRequisitionModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-1">
+              {requisitionItems.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 text-xs italic">
+                  Aucun médicament n'a été ajouté à la réquisition. Cliquez sur
+                  "Réquisitionner" dans le tableau.
+                </div>
+              ) : (
+                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase">
+                        <th className="p-3">Médicament</th>
+                        <th className="p-3 text-center">Stock Actuel</th>
+                        <th className="p-3 text-center">Quantité Demandée</th>
+                        <th className="p-3">Fournisseur</th>
+                        <th className="p-3 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {requisitionItems.map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-50/50">
+                          <td className="p-3 font-semibold text-slate-900 capitalize">
+                            {item.nom}
+                          </td>
+                          <td className="p-3 text-center font-bold text-slate-600">
+                            {item.stockActuel}
+                          </td>
+                          <td className="p-3 text-center">
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.qteDemandee}
+                              onChange={(e) =>
+                                handleQuantityChange(item.id, e.target.value)
+                              }
+                              className="w-20 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-center font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                            />
+                          </td>
+                          <td className="p-3 text-slate-600">
+                            {item.fournisseur}
+                          </td>
+                          <td className="p-3 text-right">
+                            <button
+                              onClick={() =>
+                                handleRemoveFromRequisition(item.id)
+                              }
+                              className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer"
+                              title="Retirer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setRequisitionItems([])}
+                disabled={requisitionItems.length === 0}
+                className="px-4 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition-colors disabled:opacity-40 cursor-pointer"
+              >
+                Vider la liste
+              </button>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsRequisitionModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Fermer
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrintRequisition}
+                  disabled={requisitionItems.length === 0}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold shadow-md transition-all disabled:opacity-40 cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" /> Imprimer le bon
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* COMPOSANT CACHÉ POUR L'IMPRESSION DU BON DE RÉQUISITION */}
+      <div className="hidden">
+        <div
+          ref={requisitionPrintRef}
+          className="p-8 bg-white text-slate-900 font-sans max-w-2xl mx-auto"
+        >
+          <div className="text-center border-b pb-4 mb-6 border-dashed border-slate-300">
+            <img src={Entete} alt="Entête" className="mx-auto max-h-16 mb-2" />
+            <h2 className="text-xl font-black uppercase tracking-wider text-slate-900">
+              Bon de Réquisition de Stock
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Date d'édition :{" "}
+              {new Date().toLocaleDateString("fr-FR", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
+            </p>
+          </div>
+
+          <div className="mb-6 text-xs space-y-1">
+            <p>
+              <span className="font-bold">Demandeur :</span> Pharmacie /
+              Gestionnaire de Stock
+            </p>
+            <p>
+              <span className="font-bold">Objet :</span> Demande de
+              réapprovisionnement pour rupture ou stock critique
+            </p>
+          </div>
+
+          <table className="w-full text-left border-collapse border border-slate-300 text-xs mb-8">
+            <thead>
+              <tr className="bg-slate-100 border-b border-slate-300">
+                <th className="p-2 border border-slate-300">N°</th>
+                <th className="p-2 border border-slate-300">
+                  Désignation du Médicament
+                </th>
+                <th className="p-2 border border-slate-300 text-center">
+                  Stock Actuel
+                </th>
+                <th className="p-2 border border-slate-300 text-center">
+                  Quantité Demandée
+                </th>
+                <th className="p-2 border border-slate-300">
+                  Fournisseur Souhaité
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {requisitionItems.map((item, idx) => (
+                <tr key={item.id} className="border-b border-slate-200">
+                  <td className="p-2 border border-slate-300 text-center">
+                    {idx + 1}
+                  </td>
+                  <td className="p-2 border border-slate-300 font-semibold capitalize">
+                    {item.nom}
+                  </td>
+                  <td className="p-2 border border-slate-300 text-center">
+                    {item.stockActuel}
+                  </td>
+                  <td className="p-2 border border-slate-300 text-center font-bold bg-slate-50">
+                    {item.qteDemandee} {item.unite}
+                  </td>
+                  <td className="p-2 border border-slate-300 capitalize">
+                    {item.fournisseur}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="grid grid-cols-2 gap-8 text-xs mt-12 pt-8 border-t border-slate-200">
+            <div className="text-center">
+              <p className="font-bold mb-12">Le Responsable de Stock</p>
+              <div className="border-b border-slate-400 w-48 mx-auto"></div>
+            </div>
+            <div className="text-center">
+              <p className="font-bold mb-12">
+                Visa de la Direction / Administration
+              </p>
+              <div className="border-b border-slate-400 w-48 mx-auto"></div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* MODAL AJOUT / MODIFICATION PRODUIT */}
@@ -694,7 +984,6 @@ export default function Products() {
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                     Catégorie *
                   </label>
-
                   <button
                     type="button"
                     onClick={() => setIsCatDropdownOpen(!isCatDropdownOpen)}
@@ -724,10 +1013,9 @@ export default function Products() {
                           value={catSearch}
                           onChange={(e) => setCatSearch(e.target.value)}
                           autoFocus
-                          className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-900 focus:outline-none"
                         />
                       </div>
-
                       <div className="overflow-y-auto max-h-40 divide-y divide-slate-50">
                         {filteredCategories.length === 0 ? (
                           <div className="py-3 text-center text-xs text-slate-400">
@@ -773,7 +1061,6 @@ export default function Products() {
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                     Fournisseur *
                   </label>
-
                   <button
                     type="button"
                     onClick={() =>
@@ -805,10 +1092,9 @@ export default function Products() {
                           value={fournisseurSearch}
                           onChange={(e) => setFournisseurSearch(e.target.value)}
                           autoFocus
-                          className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-900 focus:outline-none"
                         />
                       </div>
-
                       <div className="overflow-y-auto max-h-40 divide-y divide-slate-50">
                         {filteredFournisseurs.length === 0 ? (
                           <div className="py-3 text-center text-xs text-slate-400">
@@ -855,7 +1141,6 @@ export default function Products() {
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Unité de mesure *
                 </label>
-
                 <button
                   type="button"
                   onClick={() => setIsUniteDropdownOpen(!isUniteDropdownOpen)}
@@ -885,10 +1170,9 @@ export default function Products() {
                         value={uniteSearch}
                         onChange={(e) => setUniteSearch(e.target.value)}
                         autoFocus
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-900 focus:outline-none"
                       />
                     </div>
-
                     <div className="overflow-y-auto max-h-40 divide-y divide-slate-50">
                       {filteredUnites.length === 0 ? (
                         <div className="py-3 text-center text-xs text-slate-400">
@@ -896,7 +1180,7 @@ export default function Products() {
                         </div>
                       ) : (
                         filteredUnites.map((u) => {
-                          const isSelected =
+                          const isTheSelected =
                             parseInt(formData.id_unite, 10) === u.id;
                           return (
                             <button
@@ -911,7 +1195,7 @@ export default function Products() {
                                 setUniteSearch("");
                               }}
                               className={`w-full text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer ${
-                                isSelected
+                                isTheSelected
                                   ? "bg-teal-50 text-teal-700 font-semibold"
                                   : "hover:bg-slate-50 text-slate-700"
                               }`}
@@ -919,7 +1203,7 @@ export default function Products() {
                               <span className="capitalize">
                                 {u.nom || u.label}
                               </span>
-                              {isSelected && (
+                              {isTheSelected && (
                                 <Check className="w-3.5 h-3.5 text-teal-600" />
                               )}
                             </button>
