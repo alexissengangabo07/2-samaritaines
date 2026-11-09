@@ -41,7 +41,7 @@ export default function Dashboard() {
   });
 
   // États pour filtrer le graphique ('journalier', 'hebdomadaire', 'mensuel', 'annuel', 'tout')
-  const [chartPeriod, setChartPeriod] = useState("annuel"); // Par défaut 'annuel' pour capturer 2026
+  const [chartPeriod, setChartPeriod] = useState("mensuel"); // Par défaut 'mensuel' pour capturer 2026
   const [selectedMonth, setSelectedMonth] = useState("10"); // Octobre par défaut
   const [selectedYear, setSelectedYear] = useState(
     new Date().getFullYear().toString(),
