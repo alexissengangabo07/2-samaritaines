@@ -201,7 +201,10 @@ export default function Layout({ children }) {
       <aside className="w-64 bg-white border-r border-slate-200 flex flex-col justify-between p-4 sticky top-0 h-screen shadow-sm overflow-y-auto">
         <div>
           {/* Logo Brand */}
-          <div className="flex items-center gap-3 px-3 py-4 mb-6 border-b border-slate-100">
+          <Link
+            to="/dashboard"
+            className="flex items-center gap-3 px-3 py-4 mb-6 border-b border-slate-100"
+          >
             <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center font-bold text-xl shadow-lg shadow-teal-600/20">
               <Pill className="w-6 h-6" />
             </div>
@@ -213,7 +216,7 @@ export default function Layout({ children }) {
                 Les 2 samaritaines
               </span>
             </div>
-          </div>
+          </Link>
 
           {/* Navigation links */}
           <nav className="space-y-1">
