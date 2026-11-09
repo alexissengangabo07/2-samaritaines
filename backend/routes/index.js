@@ -13,6 +13,7 @@ const sortieRoutes = require("./sortie.routes");
 const abonneRoutes = require("./abonne.routes");
 const entrepriseRoutes = require("./entreprise.routes");
 const dependantRoutes = require("./dependant.routes"); // AJOUT
+const stockSecondaireRoutes = require("./stockSecondaire.routes");
 
 router.use("/users", userRoutes);
 router.use("/products", productRoutes);
@@ -26,5 +27,6 @@ router.use("/sorties", sortieRoutes);
 router.use("/abonnes", abonneRoutes); // AJOUT
 router.use("/entreprises", entrepriseRoutes); // AJOUT
 router.use("/dependants", dependantRoutes); // AJOUT
+router.use("/stock-secondaire", stockSecondaireRoutes);
 
 module.exports = router;

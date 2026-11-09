@@ -1,4 +1,11 @@
-const { Sortie, SortieItem, Product, User, sequelize } = require('../models');
+const {
+  Sortie,
+  SortieItem,
+  Product,
+  User,
+  StockSecondaire,
+  sequelize,
+} = require("../models");
 
 /**
  * Créer une nouvelle sortie interne (multi-produits)
@@ -14,15 +21,15 @@ exports.createSortie = async (req, res) => {
     // 1. Validation de base
     if (!service_beneficiaire || !service_beneficiaire.trim()) {
       await transaction.rollback();
-      return res.status(400).json({ 
-        message: 'Le nom du service bénéficiaire est obligatoire.' 
+      return res.status(400).json({
+        message: "Le nom du service bénéficiaire est obligatoire.",
       });
     }
 
     if (!Array.isArray(items) || items.length === 0) {
       await transaction.rollback();
-      return res.status(400).json({ 
-        message: 'Veuillez sélectionner au moins un produit pour la sortie.' 
+      return res.status(400).json({
+        message: "Veuillez sélectionner au moins un produit pour la sortie.",
       });
     }
 
@@ -33,8 +40,8 @@ exports.createSortie = async (req, res) => {
 
       if (!id_produit || isNaN(qtyOut) || qtyOut <= 0) {
         await transaction.rollback();
-        return res.status(400).json({ 
-          message: 'Quantité ou identifiant de produit invalide.' 
+        return res.status(400).json({
+          message: "Quantité ou identifiant de produit invalide.",
         });
       }
 
@@ -42,25 +49,28 @@ exports.createSortie = async (req, res) => {
 
       if (!produit) {
         await transaction.rollback();
-        return res.status(404).json({ 
-          message: `Le produit avec l'ID ${id_produit} n'existe pas.` 
+        return res.status(404).json({
+          message: `Le produit avec l'ID ${id_produit} n'existe pas.`,
         });
       }
 
       if (produit.quantite < qtyOut) {
         await transaction.rollback();
-        return res.status(400).json({ 
-          message: `Stock insuffisant pour "${produit.nom}". En stock: ${produit.quantite}, Demandé: ${qtyOut}` 
+        return res.status(400).json({
+          message: `Stock insuffisant pour "${produit.nom}". En stock: ${produit.quantite}, Demandé: ${qtyOut}`,
         });
       }
     }
 
     // 3. Création de l'en-tête de la sortie
-    const nouvelleSortie = await Sortie.create({
-      service_beneficiaire: service_beneficiaire.trim(),
-      motif: motif ? motif.trim() : null,
-      user_id
-    }, { transaction });
+    const nouvelleSortie = await Sortie.create(
+      {
+        service_beneficiaire: service_beneficiaire.trim(),
+        motif: motif ? motif.trim() : null,
+        user_id,
+      },
+      { transaction },
+    );
 
     // 4. Création des lignes de détails et décrémentation des stocks
     for (const item of items) {
@@ -68,18 +78,35 @@ exports.createSortie = async (req, res) => {
       const qtyOut = parseInt(quantite, 10);
 
       // Insertion dans sortie_items
-      await SortieItem.create({
-        sortie_id: nouvelleSortie.id,
-        produit_id: id_produit,
-        quantite: qtyOut
-      }, { transaction });
+      await SortieItem.create(
+        {
+          sortie_id: nouvelleSortie.id,
+          produit_id: id_produit,
+          quantite: qtyOut,
+        },
+        { transaction },
+      );
 
       // Décrémentation du stock du produit
-      await Product.decrement('quantite', {
+      await Product.decrement("quantite", {
         by: qtyOut,
         where: { id: id_produit },
-        transaction
+        transaction,
       });
+
+      // Incrémentation ou création dans le stock secondaire
+      let stockSec = await StockSecondaire.findOne({
+        where: { produit_id: id_produit },
+        transaction,
+      });
+      if (stockSec) {
+        await stockSec.increment("quantite", { by: qtyOut, transaction });
+      } else {
+        await StockSecondaire.create(
+          { produit_id: id_produit, quantite: qtyOut },
+          { transaction },
+        );
+      }
     }
 
     // Validation définitive de la transaction
@@ -90,30 +117,31 @@ exports.createSortie = async (req, res) => {
       include: [
         {
           model: SortieItem,
-          as: 'items',
-          include: [{ model: Product, as: 'produit', attributes: ['id', 'nom'] }]
+          as: "items",
+          include: [
+            { model: Product, as: "produit", attributes: ["id", "nom"] },
+          ],
         },
         {
           model: User,
-          as: 'user',
-          attributes: ['id', 'name', 'email']
-        }
-      ]
+          as: "user",
+          attributes: ["id", "name", "email"],
+        },
+      ],
     });
 
     return res.status(201).json({
-      message: 'Sortie interne enregistrée avec succès.',
-      sortie: sortieComplete
+      message: "Sortie interne enregistrée avec succès.",
+      sortie: sortieComplete,
     });
-
   } catch (error) {
     if (!transaction.finished) {
       await transaction.rollback();
     }
-    console.error('Erreur lors de la création de la sortie interne :', error);
-    return res.status(500).json({ 
-      message: 'Erreur serveur lors de la création de la sortie interne.',
-      error: error.message 
+    console.error("Erreur lors de la création de la sortie interne :", error);
+    return res.status(500).json({
+      message: "Erreur serveur lors de la création de la sortie interne.",
+      error: error.message,
     });
   }
 };
@@ -125,31 +153,37 @@ exports.createSortie = async (req, res) => {
 exports.getAllSorties = async (req, res) => {
   try {
     const sorties = await Sortie.findAll({
-      order: [['createdAt', 'DESC']],
+      order: [["createdAt", "DESC"]],
       include: [
         {
           model: SortieItem,
-          as: 'items',
-          include: [{ model: Product, as: 'produit', attributes: ['id', 'nom', 'prix_vente'] }]
+          as: "items",
+          include: [
+            {
+              model: Product,
+              as: "produit",
+              attributes: ["id", "nom", "prix_vente"],
+            },
+          ],
         },
         {
           model: User,
-          as: 'user',
-          attributes: ['id', 'name', 'email']
-        }
-      ]
+          as: "user",
+          attributes: ["id", "name", "email"],
+        },
+      ],
     });
 
     return res.status(200).json({
       success: true,
       count: sorties.length,
-      data: sorties
+      data: sorties,
     });
   } catch (error) {
-    console.error('Erreur lors de la récupération des sorties :', error);
+    console.error("Erreur lors de la récupération des sorties :", error);
     return res.status(500).json({
-      message: 'Erreur serveur lors de la récupération des sorties.',
-      error: error.message
+      message: "Erreur serveur lors de la récupération des sorties.",
+      error: error.message,
     });
   }
 };
@@ -166,27 +200,27 @@ exports.getSortieById = async (req, res) => {
       include: [
         {
           model: SortieItem,
-          as: 'items',
-          include: [{ model: Product, as: 'produit' }]
+          as: "items",
+          include: [{ model: Product, as: "produit" }],
         },
         {
           model: User,
-          as: 'user',
-          attributes: ['id', 'name', 'email']
-        }
-      ]
+          as: "user",
+          attributes: ["id", "name", "email"],
+        },
+      ],
     });
 
     if (!sortie) {
-      return res.status(404).json({ message: 'Sortie non trouvée.' });
+      return res.status(404).json({ message: "Sortie non trouvée." });
     }
 
     return res.status(200).json({ success: true, data: sortie });
   } catch (error) {
-    console.error('Erreur lors de la récupération de la sortie :', error);
+    console.error("Erreur lors de la récupération de la sortie :", error);
     return res.status(500).json({
-      message: 'Erreur serveur lors de la récupération de la sortie.',
-      error: error.message
+      message: "Erreur serveur lors de la récupération de la sortie.",
+      error: error.message,
     });
   }
 };
@@ -198,7 +232,7 @@ exports.getSortieById = async (req, res) => {
 exports.getSortieStats = async (req, res) => {
   try {
     // Total des articles distribués en consommation interne
-    const totalArticlesSortis = await SortieItem.sum('quantite') || 0;
+    const totalArticlesSortis = (await SortieItem.sum("quantite")) || 0;
 
     // Nombre total de demandes/opérations de sorties
     const totalOperations = await Sortie.count();
@@ -206,11 +240,11 @@ exports.getSortieStats = async (req, res) => {
     // Nombre total d'unités sorties regroupé par service
     const parService = await Sortie.findAll({
       attributes: [
-        'service_beneficiaire',
-        [sequelize.fn('COUNT', sequelize.col('Sortie.id')), 'nombre_demandes']
+        "service_beneficiaire",
+        [sequelize.fn("COUNT", sequelize.col("Sortie.id")), "nombre_demandes"],
       ],
-      group: ['service_beneficiaire'],
-      raw: true
+      group: ["service_beneficiaire"],
+      raw: true,
     });
 
     return res.status(200).json({
@@ -218,14 +252,17 @@ exports.getSortieStats = async (req, res) => {
       stats: {
         totalArticlesSortis,
         totalOperations,
-        frequenceParService: parService
-      }
+        frequenceParService: parService,
+      },
     });
   } catch (error) {
-    console.error('Erreur lors du calcul des statistiques des sorties :', error);
+    console.error(
+      "Erreur lors du calcul des statistiques des sorties :",
+      error,
+    );
     return res.status(500).json({
-      message: 'Erreur serveur lors des calculs statistiques.',
-      error: error.message
+      message: "Erreur serveur lors des calculs statistiques.",
+      error: error.message,
     });
   }
 };

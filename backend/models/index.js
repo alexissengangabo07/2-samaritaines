@@ -14,6 +14,7 @@ const Entreprise = require("./Entreprise"); // AJOUT
 const Abonne = require("./Abonne"); // AJOUT
 const Paiement = require("./Paiement"); // AJOUT
 const Dependant = require("./Dependant");
+const StockSecondaire = require("./StockSecondaire");
 const sequelize = require("../config/database");
 
 // Relations Product
@@ -115,6 +116,15 @@ Vente.hasMany(Paiement, {
 Paiement.belongsTo(Vente, { foreignKey: "vente_id", as: "vente" });
 
 // ===============================================================================================
+Product.hasOne(StockSecondaire, {
+  foreignKey: "produit_id",
+  as: "stockSecondaire",
+});
+
+StockSecondaire.belongsTo(Product, {
+  foreignKey: "produit_id",
+  as: "produit", // Cet alias 'produit' est essentiel pour le include
+});
 
 module.exports = {
   User,
@@ -133,5 +143,6 @@ module.exports = {
   Abonne, // AJOUT
   Paiement, // AJOUT
   Dependant, // AJOUT
+  StockSecondaire,
   sequelize,
 };
