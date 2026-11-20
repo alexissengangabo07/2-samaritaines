@@ -16,6 +16,7 @@ import Abonnes from "./pages/Abonnes";
 import Entreprises from "./pages/Entreprises";
 import CreditVentes from "./pages/CreditVentes";
 import Expired from "./pages/Expired";
+import RapportCanevasSNIS from "./pages/RapportCanevasSNIS";
 
 function App() {
   return (
@@ -47,6 +48,7 @@ function App() {
           <Route path="/utilisateurs" element={<Users />} />
           <Route path="/abonnes" element={<Abonnes />} /> {/* AJOUT */}
           <Route path="/entreprises" element={<Entreprises />} /> {/* AJOUT */}
+          <Route path="/rapport-canevas" element={<RapportCanevasSNIS />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

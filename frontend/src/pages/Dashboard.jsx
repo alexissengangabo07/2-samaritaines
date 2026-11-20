@@ -130,10 +130,10 @@ export default function Dashboard() {
       }
     });
 
-    // Tri par quantité décroissante et sélection du top 8 pour une lisibilité optimale
+    // Tri par quantité décroissante et sélection jusqu'à 20 médicaments
     return Object.values(mapQuantites)
       .sort((a, b) => b.quantite - a.quantite)
-      .slice(0, 8);
+      .slice(0, 20);
   }, [ventes, chartPeriod, selectedMonth, selectedYear]);
 
   return (
@@ -228,7 +228,7 @@ export default function Dashboard() {
           <div>
             <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <BarChart3 className="w-5 h-5 text-teal-600" />
-              Volume des ventes par médicament
+              Volume des ventes par médicament (Top 20)
             </h2>
             <p className="text-xs text-slate-500">
               Quantités délivrées par article selon la période sélectionnée
@@ -308,11 +308,11 @@ export default function Dashboard() {
             </p>
           </div>
         ) : (
-          <div className="h-72 w-full">
+          <div className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={chartData}
-                margin={{ top: 10, right: 30, left: 0, bottom: 25 }}
+                margin={{ top: 10, right: 30, left: 0, bottom: 45 }}
               >
                 <CartesianGrid
                   strokeDasharray="3 3"
@@ -321,8 +321,8 @@ export default function Dashboard() {
                 />
                 <XAxis
                   dataKey="name"
-                  tick={{ fontSize: 11, fill: "#64748b" }}
-                  angle={-20}
+                  tick={{ fontSize: 10, fill: "#64748b" }}
+                  angle={-30}
                   textAnchor="end"
                   interval={0}
                 />

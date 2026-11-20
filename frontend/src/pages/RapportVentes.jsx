@@ -18,6 +18,21 @@ import { useReactToPrint } from "react-to-print";
 import { Receipt } from "../components/Receipt";
 import Entete from "../assets/entete.png";
 
+const MOIS_LISTE = [
+  { value: "0", label: "Janvier" },
+  { value: "1", label: "Février" },
+  { value: "2", label: "Mars" },
+  { value: "3", label: "Avril" },
+  { value: "4", label: "Mai" },
+  { value: "5", label: "Juin" },
+  { value: "6", label: "Juillet" },
+  { value: "7", label: "Août" },
+  { value: "8", label: "Septembre" },
+  { value: "9", label: "Octobre" },
+  { value: "10", label: "Novembre" },
+  { value: "11", label: "Décembre" },
+];
+
 export default function RapportVentes() {
   const { user } = useAuth();
   const [lastSale, setLastSale] = useState(null);
@@ -26,6 +41,14 @@ export default function RapportVentes() {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("journalier");
+
+  // États pour la sélection dynamique du mois et de l'année (comme dans Dashboard.jsx)
+  const [selectedMonth, setSelectedMonth] = useState(
+    new Date().getMonth().toString(),
+  );
+  const [selectedYear, setSelectedYear] = useState(
+    new Date().getFullYear().toString(),
+  );
 
   // Onglet de filtrage par type de règlement (comptant par défaut)
   const [typeVenteTab, setTypeVenteTab] = useState("comptant");
@@ -84,6 +107,18 @@ export default function RapportVentes() {
     queryFn: async () => (await getProducts()).data,
   });
 
+  // Extraction dynamique des années disponibles (avec 2025, 2026, 2027 garantis)
+  const availableYears = useMemo(() => {
+    const yearsSet = new Set(["2025", "2026", "2027"]);
+    ventesData.forEach((v) => {
+      const d = new Date(v.dateVente || v.createdAt);
+      if (!isNaN(d.getTime())) {
+        yearsSet.add(d.getFullYear().toString());
+      }
+    });
+    return Array.from(yearsSet).sort();
+  }, [ventesData]);
+
   const handlePrint = useReactToPrint({
     contentRef: receiptRef,
     documentTitle: `Facture_Vente_${lastSale?.id || Date.now()}`,
@@ -94,7 +129,7 @@ export default function RapportVentes() {
     documentTitle: `Rapport_Comptable_Ventes_${typeVenteTab}_${activeTab}_${new Date().toISOString().split("T")[0]}`,
   });
 
-  // Re-réimpression d'un reçu
+  // Réimpression d'un reçu
   const handleReprint = (vente) => {
     const saleDetails = {
       id: vente.id,
@@ -112,6 +147,18 @@ export default function RapportVentes() {
     setLastSale(saleDetails);
     setTimeout(() => handlePrint(), 200);
   };
+
+  // Libellé dynamique de la période sélectionnée pour l'affichage et l'impression
+  const periodeLabel = useMemo(() => {
+    if (activeTab === "mensuel") {
+      const moisObj = MOIS_LISTE.find((m) => m.value === selectedMonth);
+      return `Mensuel (${moisObj ? moisObj.label : ""} ${selectedYear})`;
+    }
+    if (activeTab === "annuel") {
+      return `Annuel (${selectedYear})`;
+    }
+    return activeTab;
+  }, [activeTab, selectedMonth, selectedYear]);
 
   // Fonction de filtrage par période commune
   const filterVentesByPeriod = (ventes, period) => {
@@ -147,13 +194,13 @@ export default function RapportVentes() {
 
       if (period === "mensuel") {
         return (
-          venteDate.getMonth() === now.getMonth() &&
-          venteDate.getFullYear() === now.getFullYear()
+          venteDate.getMonth() === parseInt(selectedMonth, 10) &&
+          venteDate.getFullYear() === parseInt(selectedYear, 10)
         );
       }
 
       if (period === "annuel") {
-        return venteDate.getFullYear() === now.getFullYear();
+        return venteDate.getFullYear() === parseInt(selectedYear, 10);
       }
 
       return true;
@@ -172,13 +219,10 @@ export default function RapportVentes() {
       const estSolde = vente.estSolde; // true si le solde dû est égal à 0
 
       if (typeVenteTab === "comptant") {
-        // STRICT : Uniquement les ventes au comptant OU les abonnements entièrement soldés.
-        // Les abonnements non soldés sont totalement exlus d'ici.
         return estComptantPur || (estAbonne && estSolde);
       }
 
       if (typeVenteTab === "credit") {
-        // STRICT : Uniquement les ventes d'abonnés qui possèdent un solde impayé (> 0).
         return estAbonne && !estSolde;
       }
 
@@ -206,7 +250,14 @@ export default function RapportVentes() {
         hasMatchingProduct
       );
     });
-  }, [ventesData, typeVenteTab, activeTab, searchTerm]);
+  }, [
+    ventesData,
+    typeVenteTab,
+    activeTab,
+    selectedMonth,
+    selectedYear,
+    searchTerm,
+  ]);
 
   // Extraction à plat de toutes les lignes d'articles pour la table détaillée
   const flatRows = useMemo(() => {
@@ -335,7 +386,15 @@ export default function RapportVentes() {
       totalRevenue,
       totalBenefice,
     };
-  }, [selectedMedId, ventesData, typeVenteTab, activeTab, products]);
+  }, [
+    selectedMedId,
+    ventesData,
+    typeVenteTab,
+    activeTab,
+    selectedMonth,
+    selectedYear,
+    products,
+  ]);
 
   const filteredProductsForSelect = products.filter((p) =>
     p.nom?.toLowerCase().includes(medSearch.toLowerCase()),
@@ -367,7 +426,7 @@ export default function RapportVentes() {
           disabled={flatRows.length === 0}
           className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-40"
         >
-          <Printer className="w-4 h-4" /> imprimer l'État Financier (
+          <Printer className="w-4 h-4" /> Imprimer l'État Financier (
           {typeVenteTab})
         </button>
       </div>
@@ -430,7 +489,7 @@ export default function RapportVentes() {
 
           <div className="text-xs font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-3 py-1.5 rounded-xl">
             Périmètre : <span className="capitalize">{typeVenteTab}</span> |
-            Période : <span className="capitalize">{activeTab}</span>
+            Période : <span className="capitalize">{periodeLabel}</span>
           </div>
         </div>
 
@@ -585,13 +644,13 @@ export default function RapportVentes() {
       {/* TABLEAU PRINCIPAL DES OPÉRATIONS DE VENTE */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col justify-between">
         <div>
-          <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="p-6 border-b border-slate-100 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
             <h2 className="text-base font-bold text-slate-900 flex items-center gap-2 capitalize">
               <FileText className="w-5 h-5 text-teal-600" />
               Journal des Opérations ({typeVenteTab})
             </h2>
 
-            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
               <div className="relative flex-1 sm:w-48">
                 <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
@@ -605,6 +664,42 @@ export default function RapportVentes() {
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
                 />
               </div>
+
+              {/* Sélecteur de mois si le filtre mensuel est actif */}
+              {activeTab === "mensuel" && (
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => {
+                    setSelectedMonth(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-teal-500/20 cursor-pointer"
+                >
+                  {MOIS_LISTE.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {/* Sélecteur d'année si le filtre mensuel ou annuel est actif */}
+              {(activeTab === "mensuel" || activeTab === "annuel") && (
+                <select
+                  value={selectedYear}
+                  onChange={(e) => {
+                    setSelectedYear(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-teal-500/20 cursor-pointer"
+                >
+                  {availableYears.map((yr) => (
+                    <option key={yr} value={yr}>
+                      {yr}
+                    </option>
+                  ))}
+                </select>
+              )}
 
               {/* Filtres de Périodes */}
               <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-semibold">
@@ -826,8 +921,9 @@ export default function RapportVentes() {
           <p className="text-xs text-slate-500 text-center mb-6">
             Périmètre :{" "}
             <span className="uppercase font-bold">{typeVenteTab}</span> |
-            Période : <span className="uppercase font-bold">{activeTab}</span> |
-            Date d'édition : {new Date().toLocaleDateString("fr-FR")}
+            Période :{" "}
+            <span className="uppercase font-bold">{periodeLabel}</span> | Date
+            d'édition : {new Date().toLocaleDateString("fr-FR")}
           </p>
 
           <table className="w-full text-left border-collapse border border-slate-300 text-xs">
