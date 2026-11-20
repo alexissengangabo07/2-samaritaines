@@ -18,6 +18,7 @@ import {
   Wallet,
   ChevronDown,
   ShieldCheck,
+  FileBarChart2,
 } from "lucide-react";
 
 export default function Layout({ children }) {
@@ -114,6 +115,12 @@ export default function Layout({ children }) {
           path: "/inventaires",
           icon: ClipboardList,
           roles: ["admin"],
+        },
+        {
+          label: "Canevas SNIS",
+          path: "/rapport-canevas",
+          icon: FileBarChart2,
+          roles: ["admin", "pharmacien"],
         },
       ],
     },
