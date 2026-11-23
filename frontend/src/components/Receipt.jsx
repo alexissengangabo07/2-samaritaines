@@ -82,7 +82,7 @@ export const Receipt = forwardRef(({ saleData }, ref) => {
           <tr className="border-b text-slate-500">
             <th className="pb-2">Produit</th>
             <th className="pb-2 text-center">Qté</th>
-            <th className="pb-2 text-right">P.U</th>
+            {/* <th className="pb-2 text-right">P.U</th> */}
             <th className="pb-2 text-right">Total</th>
           </tr>
         </thead>
@@ -109,9 +109,9 @@ export const Receipt = forwardRef(({ saleData }, ref) => {
                     {productName}
                   </td>
                   <td className="py-1.5 text-center">{quantity}</td>
-                  <td className="py-1.5 text-right">
+                  {/* <td className="py-1.5 text-right">
                     {unitPrice.toLocaleString()}
-                  </td>
+                  </td> */}
                   <td className="py-1.5 text-right">
                     {lineTotal.toLocaleString()}
                   </td>

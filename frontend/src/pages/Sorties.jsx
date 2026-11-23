@@ -8,6 +8,7 @@ import {
   facturerInterné,
   ajouterArticlesInterne,
 } from "../api/stockSecondaire.api";
+import { getAbonnes } from "../api/abonne.api";
 import { useAuth } from "../context/AuthContext";
 import Layout from "../components/Layout";
 import {
@@ -29,6 +30,9 @@ import {
   Eye,
   ChevronLeft,
   ChevronRight,
+  UserCheck,
+  Percent,
+  Check,
 } from "lucide-react";
 import { useReactToPrint } from "react-to-print";
 import { Receipt } from "../components/Receipt";
@@ -46,12 +50,24 @@ export default function Sorties() {
   const [motif, setMotif] = useState("");
   const [cartItems, setCartItems] = useState([]);
 
-  // Formulaire première facturation interné
+  // Formulaire première facturation interné (Ordinaire ou Abonné)
+  const [typePatient, setTypePatient] = useState("ordinaire"); // 'ordinaire' | 'abonne'
+  const [selectedAbonneId, setSelectedAbonneId] = useState("");
+  const [selectedDependantId, setSelectedDependantId] = useState("");
   const [patientNom, setPatientNom] = useState("");
   const [chambreNum, setChambreNum] = useState("");
   const [cartInternes, setCartInternes] = useState([]);
   const [selectedSecId, setSelectedSecId] = useState("");
   const [quantiteInterne, setQuantiteInterne] = useState(1);
+
+  // Dropdowns Abonnés & Dépendants
+  const [abonneSearch, setAbonneSearch] = useState("");
+  const [isAbonneDropdownOpen, setIsAbonneDropdownOpen] = useState(false);
+  const abonneDropdownRef = useRef(null);
+
+  const [dependantSearch, setDependantSearch] = useState("");
+  const [isDependantDropdownOpen, setIsDependantDropdownOpen] = useState(false);
+  const dependantDropdownRef = useRef(null);
 
   // Modale pour l'ajout de consommation (J+1, J+2...)
   const [showAddModal, setShowAddModal] = useState(false);
@@ -67,18 +83,18 @@ export default function Sorties() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [factureDetail, setFactureDetail] = useState(null);
 
-  // Impression des reçus / factures
+  // Impression des reçus / factures (CORRECTION : contentRef prend directement la ref)
   const [lastSaleToPrint, setLastSaleToPrint] = useState(null);
-  const receiptRef = useRef();
+  const receiptRef = useRef(null);
   const handlePrintReceipt = useReactToPrint({
-    contentRef: () => receiptRef.current,
+    contentRef: receiptRef,
     documentTitle: `Facture_Interne_${lastSaleToPrint?.id || Date.now()}`,
   });
 
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
-  // Dropdowns filtres
+  // Dropdowns filtres produits
   const [productSearch, setProductSearch] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -87,10 +103,10 @@ export default function Sorties() {
   const [isSecDropdownOpen, setIsSecDropdownOpen] = useState(false);
   const secDropdownRef = useRef(null);
 
-  // Pagination Historique Transferts
+  // Pagination Historique Transferts (Limité à 5 par page, du plus récent au plus ancien)
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8;
+  const itemsPerPage = 5;
 
   // Pagination Tableaux (Patients Internés & Stock Secondaire) limités à 5 par page
   const [searchInternes, setSearchInternes] = useState("");
@@ -101,7 +117,7 @@ export default function Sorties() {
   const [pageStockSec, setPageStockSec] = useState(1);
   const limitStockSec = 5;
 
-  // Requetes
+  // Requêtes
   const { data: productsData = [] } = useQuery({
     queryKey: ["products"],
     queryFn: async () => (await getProducts()).data,
@@ -120,6 +136,11 @@ export default function Sorties() {
   const { data: facturesInternesData = [] } = useQuery({
     queryKey: ["factures-internes"],
     queryFn: async () => (await getFacturesInternes()).data,
+  });
+
+  const { data: abonnesData = [] } = useQuery({
+    queryKey: ["abonnes"],
+    queryFn: async () => (await getAbonnes()).data,
   });
 
   const products = useMemo(
@@ -143,7 +164,12 @@ export default function Sorties() {
         : facturesInternesData.data || [],
     [facturesInternesData],
   );
+  const abonnes = useMemo(
+    () => (Array.isArray(abonnesData) ? abonnesData : abonnesData.data || []),
+    [abonnesData],
+  );
 
+  // Fermeture des dropdowns au clic extérieur
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target))
@@ -158,6 +184,16 @@ export default function Sorties() {
         !addDropdownRef.current.contains(event.target)
       )
         setIsAddDropdownOpen(false);
+      if (
+        abonneDropdownRef.current &&
+        !abonneDropdownRef.current.contains(event.target)
+      )
+        setIsAbonneDropdownOpen(false);
+      if (
+        dependantDropdownRef.current &&
+        !dependantDropdownRef.current.contains(event.target)
+      )
+        setIsDependantDropdownOpen(false);
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -183,6 +219,49 @@ export default function Sorties() {
   const filteredAddStockSec = stockSecondaire.filter((s) =>
     s.produit?.nom?.toLowerCase().includes(addSecSearch.toLowerCase()),
   );
+
+  const selectedAbonne = abonnes.find(
+    (a) => a.id === parseInt(selectedAbonneId, 10),
+  );
+  const selectedDependant = selectedAbonne?.dependants?.find(
+    (d) => d.id === parseInt(selectedDependantId, 10),
+  );
+
+  const filteredAbonnes = abonnes.filter(
+    (a) =>
+      a.nom?.toLowerCase().includes(abonneSearch.toLowerCase()) ||
+      a.entreprise?.nom?.toLowerCase().includes(abonneSearch.toLowerCase()),
+  );
+
+  const filteredDependants = selectedAbonne?.dependants
+    ? selectedAbonne.dependants.filter(
+        (d) =>
+          d.nom?.toLowerCase().includes(dependantSearch.toLowerCase()) ||
+          (d.lien &&
+            d.lien.toLowerCase().includes(dependantSearch.toLowerCase())),
+      )
+    : [];
+
+  // Recalculer automatiquement les prix du panier si on change de type (Ordinaire <-> Abonné) ou d'abonné
+  useEffect(() => {
+    const reduction =
+      typePatient === "abonne" && selectedAbonne?.entreprise
+        ? selectedAbonne.entreprise.pourcentage_reduction
+        : 0;
+
+    setCartInternes((prev) =>
+      prev.map((item) => {
+        const prixOriginal = item.prix_original ?? item.prix_vente;
+        const prixApplique = Math.round(prixOriginal * (1 - reduction / 100));
+        return {
+          ...item,
+          prix_original: prixOriginal,
+          prix_vente: prixApplique,
+          total: item.quantite * prixApplique,
+        };
+      }),
+    );
+  }, [typePatient, selectedAbonneId, selectedAbonne]);
 
   // Mutations
   const createSortieMutation = useMutation({
@@ -222,6 +301,11 @@ export default function Sorties() {
       setChambreNum("");
       setSelectedSecId("");
       setQuantiteInterne(1);
+      setTypePatient("ordinaire");
+      setSelectedAbonneId("");
+      setSelectedDependantId("");
+      setAbonneSearch("");
+      setDependantSearch("");
     },
     onError: (err) => {
       setErrorMsg(
@@ -302,6 +386,13 @@ export default function Sorties() {
     const qty = parseInt(quantiteInterne, 10);
     if (isNaN(qty) || qty <= 0) return;
 
+    if (typePatient === "abonne" && !selectedAbonneId) {
+      setErrorMsg(
+        "Veuillez sélectionner un abonné avant d'ajouter un médicament.",
+      );
+      return;
+    }
+
     const existing = cartInternes.find(
       (item) => item.stock_sec_id === selectedStockSecItem.id,
     );
@@ -314,6 +405,13 @@ export default function Sorties() {
       );
       return;
     }
+
+    const reduction =
+      typePatient === "abonne" && selectedAbonne?.entreprise
+        ? selectedAbonne.entreprise.pourcentage_reduction
+        : 0;
+    const prixOriginal = selectedStockSecItem.produit?.prix_vente || 0;
+    const prixUnitaire = Math.round(prixOriginal * (1 - reduction / 100));
 
     if (existing) {
       setCartInternes(
@@ -335,14 +433,32 @@ export default function Sorties() {
           produit_id: selectedStockSecItem.produit_id,
           nom: selectedStockSecItem.produit?.nom,
           quantite: qty,
-          prix_vente: selectedStockSecItem.produit?.prix_vente || 0,
-          total: qty * (selectedStockSecItem.produit?.prix_vente || 0),
+          prix_original: prixOriginal,
+          prix_vente: prixUnitaire,
+          total: qty * prixUnitaire,
         },
       ]);
     }
     setSelectedSecId("");
+    setSecSearch("");
     setQuantiteInterne(1);
     setErrorMsg("");
+  };
+
+  const handleRemoveFromInterneCart = (stockSecId) => {
+    setCartInternes(
+      cartInternes.filter((item) => item.stock_sec_id !== stockSecId),
+    );
+  };
+
+  // Calcul de la réduction applicable à une facture existante (pour la modale Conso)
+  const getReductionForFacture = (facture) => {
+    if (!facture || facture.type_vente !== "abonne") return 0;
+    if (facture.abonne?.entreprise?.pourcentage_reduction) {
+      return facture.abonne.entreprise.pourcentage_reduction;
+    }
+    const foundAbonne = abonnes.find((a) => a.id === facture.abonne_id);
+    return foundAbonne?.entreprise?.pourcentage_reduction || 0;
   };
 
   const handleAddToAddCart = () => {
@@ -362,6 +478,10 @@ export default function Sorties() {
       );
       return;
     }
+
+    const reduction = getReductionForFacture(selectedFacture);
+    const prixOriginal = selectedAddSecItem.produit?.prix_vente || 0;
+    const prixUnitaire = Math.round(prixOriginal * (1 - reduction / 100));
 
     if (existing) {
       setAddCartItems(
@@ -383,14 +503,22 @@ export default function Sorties() {
           produit_id: selectedAddSecItem.produit_id,
           nom: selectedAddSecItem.produit?.nom,
           quantite: qty,
-          prix_vente: selectedAddSecItem.produit?.prix_vente || 0,
-          total: qty * (selectedAddSecItem.produit?.prix_vente || 0),
+          prix_original: prixOriginal,
+          prix_vente: prixUnitaire,
+          total: qty * prixUnitaire,
         },
       ]);
     }
     setAddSecId("");
+    setAddSecSearch("");
     setAddQuantite(1);
     setErrorMsg("");
+  };
+
+  const handleRemoveFromAddCart = (stockSecId) => {
+    setAddCartItems(
+      addCartItems.filter((item) => item.stock_sec_id !== stockSecId),
+    );
   };
 
   const totalInternesAmount = useMemo(
@@ -423,15 +551,35 @@ export default function Sorties() {
 
   const handleSubmitFactureInterne = (e) => {
     e.preventDefault();
-    if (cartInternes.length === 0 || !patientNom.trim()) {
-      setErrorMsg(
-        "Renseignez le nom du patient et sélectionnez ses médicaments.",
-      );
+    if (cartInternes.length === 0) {
+      setErrorMsg("Sélectionnez au moins un médicament.");
       return;
     }
+    if (typePatient === "ordinaire" && !patientNom.trim()) {
+      setErrorMsg("Renseignez le nom du patient.");
+      return;
+    }
+    if (typePatient === "abonne" && !selectedAbonneId) {
+      setErrorMsg("Veuillez sélectionner un abonné.");
+      return;
+    }
+
+    const nomFinalPatient =
+      typePatient === "abonne"
+        ? selectedDependant
+          ? `${selectedDependant.nom} (${selectedDependant.lien || "Dépendant"} de ${selectedAbonne?.nom})`
+          : selectedAbonne?.nom
+        : patientNom.trim();
+
     facturerInterneMutation.mutate({
-      patient_nom: patientNom.trim(),
+      patient_nom: nomFinalPatient,
       chambre: chambreNum.trim(),
+      type_vente: typePatient,
+      abonne_id: typePatient === "abonne" ? selectedAbonne?.id : null,
+      dependant_id:
+        typePatient === "abonne" && selectedDependantId
+          ? parseInt(selectedDependantId, 10)
+          : null,
       user_id: user?.id,
       items: cartInternes.map((i) => ({
         stock_sec_id: i.stock_sec_id,
@@ -470,24 +618,41 @@ export default function Sorties() {
   };
 
   const handlePrintFacture = (facture) => {
+    const foundAbonne =
+      facture.abonne || abonnes.find((a) => a.id === facture.abonne_id);
+
     const formattedData = {
       id: facture.id,
-      user_name: user?.name || user?.nom || "Personnel",
+      user_name:
+        facture.vendeur?.name ||
+        facture.User?.name ||
+        user?.name ||
+        user?.nom ||
+        "Personnel",
       nom_client: facture.nom_client || "Patient Hospitalisé",
+      entreprise_nom: foundAbonne?.entreprise?.nom || null,
+      abonne: foundAbonne ? { nom: foundAbonne.nom } : null,
+      dependant_id: facture.dependant_id || null,
       date: facture.createdAt || facture.dateVente,
       items:
         facture.items?.map((it) => ({
           nom: it.produit?.nom || "Médicament",
           quantite: it.quantite,
-          prix_unitaire: it.prix_unitaire || it.total_ligne / it.quantite || 0,
+          prix_unitaire:
+            it.prix_unitaire ||
+            (it.quantite > 0 ? it.total_ligne / it.quantite : 0),
         })) || [],
       total: facture.total || 0,
     };
     setLastSaleToPrint(formattedData);
-    setTimeout(() => handlePrintReceipt(), 250);
+    setTimeout(() => {
+      if (handlePrintReceipt) {
+        handlePrintReceipt();
+      }
+    }, 300);
   };
 
-  // Traitement tableau historique des sorties avec extraction de l'unité de quantité
+  // Traitement tableau historique des sorties trié du plus récent au plus ancien
   const flatRows = useMemo(() => {
     const rows = [];
     sorties.forEach((sortie) => {
@@ -506,7 +671,14 @@ export default function Sorties() {
         });
       });
     });
-    return rows;
+
+    // Tri du plus récent au plus ancien
+    return rows.sort((a, b) => {
+      const dateA = new Date(a.dateSortie || 0).getTime();
+      const dateB = new Date(b.dateSortie || 0).getTime();
+      if (dateB !== dateA) return dateB - dateA;
+      return (b.id || 0) - (a.id || 0);
+    });
   }, [sorties]);
 
   const filteredRows = useMemo(() => {
@@ -518,6 +690,7 @@ export default function Sorties() {
     );
   }, [flatRows, searchTerm]);
 
+  const totalPages = Math.ceil(filteredRows.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const currentRows = filteredRows.slice(startIndex, startIndex + itemsPerPage);
 
@@ -737,47 +910,106 @@ export default function Sorties() {
 
           <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col justify-between">
             <div>
-              <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+              <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <h2 className="text-base font-bold text-slate-900">
                   Historique des Transferts de Stock
                 </h2>
-                <input
-                  type="text"
-                  placeholder="Rechercher..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs w-64"
-                />
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Rechercher produit ou service..."
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                  />
+                </div>
               </div>
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase">
-                    <th className="py-3 px-6">Produit</th>
-                    <th className="py-3 px-6">Qté Transférée</th>
-                    <th className="py-3 px-6">Service</th>
-                    <th className="py-3 px-6">Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-sm">
-                  {currentRows.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/50">
-                      <td className="py-3.5 px-6 font-semibold text-slate-900 capitalize">
-                        {row.nom_produit}
-                      </td>
-                      <td className="py-3.5 px-6 font-bold text-amber-600">
-                        +{row.quantite} {row.unite}
-                      </td>
-                      <td className="py-3.5 px-6 capitalize">
-                        {row.service_beneficiaire}
-                      </td>
-                      <td className="py-3.5 px-6 text-slate-400 text-xs">
-                        {new Date(row.dateSortie).toLocaleString("fr-FR")}
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase">
+                      <th className="py-3 px-6">Produit</th>
+                      <th className="py-3 px-6">Qté Transférée</th>
+                      <th className="py-3 px-6">Service</th>
+                      <th className="py-3 px-6">Date</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-sm">
+                    {currentRows.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan="4"
+                          className="py-8 text-center text-slate-400 text-xs italic"
+                        >
+                          Aucun transfert enregistré.
+                        </td>
+                      </tr>
+                    ) : (
+                      currentRows.map((row, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/50">
+                          <td className="py-3.5 px-6 font-semibold text-slate-900 capitalize">
+                            {row.nom_produit}
+                          </td>
+                          <td className="py-3.5 px-6 font-bold text-amber-600">
+                            +{row.quantite} {row.unite}
+                          </td>
+                          <td className="py-3.5 px-6 capitalize">
+                            {row.service_beneficiaire}
+                          </td>
+                          <td className="py-3.5 px-6 text-slate-400 text-xs">
+                            {new Date(row.dateSortie).toLocaleString("fr-FR")}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
+
+            {/* Pagination Historique Transferts (5 par page) */}
+            {filteredRows.length > 0 && (
+              <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50/50">
+                <span className="text-xs text-slate-500">
+                  Affichage de{" "}
+                  <span className="font-semibold">{startIndex + 1}</span> à{" "}
+                  <span className="font-semibold">
+                    {Math.min(startIndex + itemsPerPage, filteredRows.length)}
+                  </span>{" "}
+                  sur{" "}
+                  <span className="font-semibold">{filteredRows.length}</span>{" "}
+                  transferts
+                </span>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.max(prev - 1, 1))
+                    }
+                    disabled={currentPage === 1}
+                    className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="text-xs font-semibold text-slate-700 px-2">
+                    Page {currentPage} sur {totalPages || 1}
+                  </span>
+                  <button
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                    }
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 cursor-pointer"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -787,23 +1019,272 @@ export default function Sorties() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4 h-fit">
             <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <ReceiptText className="w-5 h-5 text-amber-600" /> Nouveau facture
-              d'un Patient Hospitalisé
+              <ReceiptText className="w-5 h-5 text-amber-600" /> Nouvelle
+              facture d'un Patient Hospitalisé
             </h2>
 
             <div className="space-y-3">
+              {/* Sélecteur Type de Patient : Ordinaire ou Abonné */}
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Nom du Patient *
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Catégorie du Patient
                 </label>
-                <input
-                  type="text"
-                  placeholder="Ex: Jean Mukendi"
-                  value={patientNom}
-                  onChange={(e) => setPatientNom(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs"
-                />
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTypePatient("ordinaire");
+                      setSelectedAbonneId("");
+                      setSelectedDependantId("");
+                      setAbonneSearch("");
+                      setDependantSearch("");
+                    }}
+                    className={`py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                      typePatient === "ordinaire"
+                        ? "bg-slate-800 text-white border-slate-800"
+                        : "bg-slate-50 text-slate-600 border-slate-200"
+                    }`}
+                  >
+                    Patient Ordinaire
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTypePatient("abonne");
+                      setPatientNom("");
+                    }}
+                    className={`py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                      typePatient === "abonne"
+                        ? "bg-teal-600 text-white border-teal-600"
+                        : "bg-slate-50 text-slate-600 border-slate-200"
+                    }`}
+                  >
+                    <UserCheck className="w-3.5 h-3.5" /> Abonné
+                  </button>
+                </div>
               </div>
+
+              {/* Affichage conditionnel : Abonné (+ Dépendant) OU Nom Patient Ordinaire */}
+              {typePatient === "abonne" ? (
+                <div className="space-y-3">
+                  <div className="relative" ref={abonneDropdownRef}>
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Abonné *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setIsAbonneDropdownOpen(!isAbonneDropdownOpen)
+                      }
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-all cursor-pointer"
+                    >
+                      <span
+                        className={
+                          selectedAbonne
+                            ? "text-slate-900 font-medium capitalize"
+                            : "text-slate-400"
+                        }
+                      >
+                        {selectedAbonne
+                          ? `${selectedAbonne.nom} ${selectedAbonne.entreprise ? `(-${selectedAbonne.entreprise.pourcentage_reduction}% via ${selectedAbonne.entreprise.nom})` : "(sans réduction)"}`
+                          : "-- Choisir un abonné --"}
+                      </span>
+                      <ChevronDown className="w-4 h-4 text-slate-400" />
+                    </button>
+
+                    {isAbonneDropdownOpen && (
+                      <div className="absolute z-50 mt-1.5 w-full bg-white border border-slate-200 rounded-2xl shadow-xl p-2 max-h-60 flex flex-col gap-2">
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            placeholder="Rechercher un abonné..."
+                            value={abonneSearch}
+                            onChange={(e) => setAbonneSearch(e.target.value)}
+                            autoFocus
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                          />
+                        </div>
+
+                        <div className="overflow-y-auto max-h-40 divide-y divide-slate-50">
+                          {filteredAbonnes.length === 0 ? (
+                            <div className="py-3 text-center text-xs text-slate-400">
+                              Aucun abonné trouvé
+                            </div>
+                          ) : (
+                            filteredAbonnes.map((a) => {
+                              const isSelected =
+                                parseInt(selectedAbonneId, 10) === a.id;
+                              return (
+                                <button
+                                  key={a.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedAbonneId(a.id.toString());
+                                    setSelectedDependantId("");
+                                    setDependantSearch("");
+                                    setIsAbonneDropdownOpen(false);
+                                    setAbonneSearch("");
+                                  }}
+                                  className={`w-full text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                                    isSelected
+                                      ? "bg-teal-50 text-teal-700 font-semibold"
+                                      : "hover:bg-slate-50 text-slate-700"
+                                  }`}
+                                >
+                                  <span className="capitalize">
+                                    {a.nom}{" "}
+                                    {a.entreprise
+                                      ? `(-${a.entreprise.pourcentage_reduction}% via ${a.entreprise.nom})`
+                                      : ""}
+                                  </span>
+                                  {isSelected && (
+                                    <Check className="w-3.5 h-3.5 text-teal-600" />
+                                  )}
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedAbonne &&
+                      (selectedAbonne.entreprise ? (
+                        <p className="text-[10px] text-teal-600 font-semibold mt-1.5 flex items-center gap-1">
+                          <Percent className="w-3 h-3" /> Réduction de{" "}
+                          {selectedAbonne.entreprise.pourcentage_reduction}% (
+                          {selectedAbonne.entreprise.nom}) appliquée
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-amber-600 font-semibold mt-1.5 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" /> Cet abonné n'a pas
+                          d'entreprise associée : aucune réduction
+                        </p>
+                      ))}
+                  </div>
+
+                  {selectedAbonne &&
+                    selectedAbonne.dependants &&
+                    selectedAbonne.dependants.length > 0 && (
+                      <div className="relative" ref={dependantDropdownRef}>
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                          Bénéficiaire / Dépendant (Optionnel)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setIsDependantDropdownOpen(!isDependantDropdownOpen)
+                          }
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-all cursor-pointer"
+                        >
+                          <span
+                            className={
+                              selectedDependant
+                                ? "text-slate-900 font-medium capitalize"
+                                : "text-slate-400"
+                            }
+                          >
+                            {selectedDependant
+                              ? `${selectedDependant.nom} (${selectedDependant.lien || "Dépendant"})`
+                              : "-- C'est l'abonné principal --"}
+                          </span>
+                          <ChevronDown className="w-4 h-4 text-slate-400" />
+                        </button>
+
+                        {isDependantDropdownOpen && (
+                          <div className="absolute z-50 mt-1.5 w-full bg-white border border-slate-200 rounded-2xl shadow-xl p-2 max-h-60 flex flex-col gap-2">
+                            <div className="relative">
+                              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                              <input
+                                type="text"
+                                placeholder="Rechercher un bénéficiaire..."
+                                value={dependantSearch}
+                                onChange={(e) =>
+                                  setDependantSearch(e.target.value)
+                                }
+                                autoFocus
+                                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                              />
+                            </div>
+
+                            <div className="overflow-y-auto max-h-40 divide-y divide-slate-50">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedDependantId("");
+                                  setIsDependantDropdownOpen(false);
+                                  setDependantSearch("");
+                                }}
+                                className={`w-full text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                                  !selectedDependantId
+                                    ? "bg-teal-50 text-teal-700 font-semibold"
+                                    : "hover:bg-slate-50 text-slate-700"
+                                }`}
+                              >
+                                <span>-- C'est l'abonné principal --</span>
+                                {!selectedDependantId && (
+                                  <Check className="w-3.5 h-3.5 text-teal-600" />
+                                )}
+                              </button>
+
+                              {filteredDependants.length === 0 ? (
+                                <div className="py-3 text-center text-xs text-slate-400">
+                                  Aucun bénéficiaire trouvé
+                                </div>
+                              ) : (
+                                filteredDependants.map((dep) => {
+                                  const isSelected =
+                                    parseInt(selectedDependantId, 10) ===
+                                    dep.id;
+                                  return (
+                                    <button
+                                      key={dep.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedDependantId(
+                                          dep.id.toString(),
+                                        );
+                                        setIsDependantDropdownOpen(false);
+                                        setDependantSearch("");
+                                      }}
+                                      className={`w-full text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                                        isSelected
+                                          ? "bg-teal-50 text-teal-700 font-semibold"
+                                          : "hover:bg-slate-50 text-slate-700"
+                                      }`}
+                                    >
+                                      <span className="capitalize">
+                                        {dep.nom} ({dep.lien || "Dépendant"})
+                                      </span>
+                                      {isSelected && (
+                                        <Check className="w-3.5 h-3.5 text-teal-600" />
+                                      )}
+                                    </button>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Nom du Patient *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Jean Mukendi"
+                    value={patientNom}
+                    onChange={(e) => setPatientNom(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs"
+                  />
+                </div>
+              )}
+
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Chambre / Lit
@@ -901,15 +1382,34 @@ export default function Sorties() {
                     key={i.stock_sec_id}
                     className="flex justify-between items-center p-2 bg-slate-50 rounded-xl text-xs"
                   >
-                    <div>
-                      <p className="font-semibold text-slate-900">{i.nom}</p>
-                      <p className="text-[10px] text-slate-500">
+                    <div className="truncate pr-2">
+                      <p className="font-semibold text-slate-900 truncate">
+                        {i.nom}
+                      </p>
+                      <p className="text-[10px] text-slate-500 flex items-center gap-1.5">
                         {i.quantite} x {i.prix_vente.toLocaleString()} FC
+                        {i.prix_original &&
+                          i.prix_original !== i.prix_vente && (
+                            <span className="line-through text-slate-400">
+                              {i.prix_original.toLocaleString()} FC
+                            </span>
+                          )}
                       </p>
                     </div>
-                    <span className="font-bold text-slate-800">
-                      {i.total.toLocaleString()} FC
-                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="font-bold text-slate-800">
+                        {i.total.toLocaleString()} FC
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleRemoveFromInterneCart(i.stock_sec_id)
+                        }
+                        className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -989,9 +1489,17 @@ export default function Sorties() {
                         currentInternesRows.map((facture) => (
                           <tr key={facture.id} className="hover:bg-slate-50/50">
                             <td className="py-3.5 px-4 font-semibold text-slate-900 capitalize">
-                              {facture.nom_client}
+                              <div className="flex items-center flex-wrap gap-1.5">
+                                <span>{facture.nom_client}</span>
+                                {facture.type_vente === "abonne" && (
+                                  <span className="inline-flex items-center gap-1 bg-teal-50 text-teal-700 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                                    <UserCheck className="w-3 h-3" /> Abonné
+                                  </span>
+                                )}
+                              </div>
                               <span className="block text-[10px] text-slate-400 font-normal">
                                 Facture #{facture.id}
+                                {facture.chambre ? ` • ${facture.chambre}` : ""}
                               </span>
                             </td>
                             <td className="py-3.5 px-4 text-xs text-slate-600">
@@ -1005,6 +1513,7 @@ export default function Sorties() {
                             <td className="py-3.5 px-4 text-right">
                               <div className="flex items-center justify-end gap-1.5">
                                 <button
+                                  type="button"
                                   onClick={() => openAddModal(facture)}
                                   className="px-2.5 py-1 bg-teal-50 text-teal-700 hover:bg-teal-100 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
                                   title="Ajouter des médicaments (J+1, J+2...)"
@@ -1012,6 +1521,7 @@ export default function Sorties() {
                                   <PlusCircle className="w-3.5 h-3.5" /> Conso
                                 </button>
                                 <button
+                                  type="button"
                                   onClick={() => handlePrintFacture(facture)}
                                   className="p-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-xs transition-all cursor-pointer"
                                   title="Imprimer la facture"
@@ -1019,6 +1529,7 @@ export default function Sorties() {
                                   <Printer className="w-3.5 h-3.5" />
                                 </button>
                                 <button
+                                  type="button"
                                   onClick={() => {
                                     setFactureDetail(facture);
                                     setShowDetailModal(true);
@@ -1203,11 +1714,25 @@ export default function Sorties() {
             <h2 className="text-base font-bold text-slate-900 mb-1">
               Ajouter une consommation à la Facture #{selectedFacture.id}
             </h2>
-            <p className="text-xs text-slate-500 mb-4 capitalize">
+            <p className="text-xs text-slate-500 mb-1 capitalize">
               Patient : {selectedFacture.nom_client}
             </p>
 
-            <div className="space-y-3">
+            {selectedFacture.type_vente === "abonne" &&
+              (getReductionForFacture(selectedFacture) > 0 ? (
+                <p className="text-[11px] text-teal-600 font-semibold mb-4 flex items-center gap-1">
+                  <Percent className="w-3.5 h-3.5" />
+                  Réduction abonné de {getReductionForFacture(selectedFacture)}%
+                  appliquée automatiquement
+                </p>
+              ) : (
+                <p className="text-[11px] text-amber-600 font-semibold mb-4 flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  Abonné sans réduction associée
+                </p>
+              ))}
+
+            <div className="space-y-3 mt-3">
               <div className="relative" ref={addDropdownRef}>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Médicament (Stock Secondaire)
@@ -1292,15 +1817,34 @@ export default function Sorties() {
                     key={item.stock_sec_id}
                     className="flex items-center justify-between p-2 bg-slate-50 rounded-xl border border-slate-100 text-xs"
                   >
-                    <div className="truncate">
-                      <p className="font-semibold text-slate-900">{item.nom}</p>
-                      <p className="text-[10px] text-slate-500">
+                    <div className="truncate pr-2">
+                      <p className="font-semibold text-slate-900 truncate">
+                        {item.nom}
+                      </p>
+                      <p className="text-[10px] text-slate-500 flex items-center gap-1.5">
                         {item.quantite} x {item.prix_vente.toLocaleString()} FC
+                        {item.prix_original &&
+                          item.prix_original !== item.prix_vente && (
+                            <span className="line-through text-slate-400">
+                              {item.prix_original.toLocaleString()} FC
+                            </span>
+                          )}
                       </p>
                     </div>
-                    <span className="font-bold text-slate-800">
-                      {item.total.toLocaleString()} FC
-                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="font-bold text-slate-800">
+                        {item.total.toLocaleString()} FC
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleRemoveFromAddCart(item.stock_sec_id)
+                        }
+                        className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1346,8 +1890,13 @@ export default function Sorties() {
               <X className="w-5 h-5" />
             </button>
 
-            <h2 className="text-base font-bold text-slate-900 mb-1">
-              Détails de la Facture #{factureDetail.id}
+            <h2 className="text-base font-bold text-slate-900 mb-1 flex items-center gap-2">
+              <span>Détails de la Facture #{factureDetail.id}</span>
+              {factureDetail.type_vente === "abonne" && (
+                <span className="inline-flex items-center gap-1 bg-teal-50 text-teal-700 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                  <UserCheck className="w-3 h-3" /> Abonné
+                </span>
+              )}
             </h2>
             <p className="text-xs text-slate-500 mb-4 capitalize">
               Patient :{" "}
@@ -1406,6 +1955,7 @@ export default function Sorties() {
 
             <div className="mt-5 flex gap-2">
               <button
+                type="button"
                 onClick={() => {
                   setShowDetailModal(false);
                   openAddModal(factureDetail);
@@ -1415,6 +1965,7 @@ export default function Sorties() {
                 <PlusCircle className="w-4 h-4" /> Ajouter conso
               </button>
               <button
+                type="button"
                 onClick={() => {
                   setShowDetailModal(false);
                   handlePrintFacture(factureDetail);
