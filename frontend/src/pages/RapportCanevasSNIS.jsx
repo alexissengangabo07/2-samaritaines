@@ -23,6 +23,19 @@ const MOIS_LISTE = [
   { value: "11", label: "Décembre" },
 ];
 
+function extractProductId(item) {
+  return (
+    item?.produit_id ??
+    item?.produitId ??
+    item?.id_produit ??
+    item?.product_id ??
+    item?.productId ??
+    item?.produit?.id ??
+    item?.Product?.id ??
+    null
+  );
+}
+
 export default function RapportCanevasSNIS() {
   const printRef = useRef();
 
@@ -97,55 +110,76 @@ export default function RapportCanevasSNIS() {
     }));
   };
 
-  // Quantité consommée par produit_id sur le mois et l'année sélectionnés (modèles Vente & DetailVente)[cite: 13, 17]
-  const consumedByProduct = useMemo(() => {
-    const map = {};
+  // Mouvements de ventes : avant le mois sélectionné vs pendant le mois sélectionné
+  const { consumedBeforeMonth, consumedInMonth } = useMemo(() => {
+    const beforeMap = {};
+    const monthMap = {};
     const targetMonth = parseInt(selectedMonth, 10);
     const targetYear = parseInt(selectedYear, 10);
+    const startOfTargetMonth = new Date(targetYear, targetMonth, 1).getTime();
 
     ventesData.forEach((vente) => {
       const d = new Date(vente.dateVente || vente.createdAt);
       if (isNaN(d.getTime())) return;
 
-      if (d.getMonth() === targetMonth && d.getFullYear() === targetYear) {
-        const lignes = vente.items || vente.DetailVentes || vente.details || [];
+      const lignes = vente.items || vente.DetailVentes || vente.details || [];
+      const isInTargetMonth =
+        d.getMonth() === targetMonth && d.getFullYear() === targetYear;
+      const isBeforeTargetMonth = d.getTime() < startOfTargetMonth;
+
+      if (lignes.length > 0) {
         lignes.forEach((item) => {
-          const prodId =
-            item.produit_id ||
-            item.produitId ||
-            item.produit?.id ||
-            item.id_produit;
+          const prodId = extractProductId(item);
           if (!prodId) return;
-          map[prodId] = (map[prodId] || 0) + Number(item.quantite || 0);
+          const qty = Number(item.quantite || 0);
+          if (isInTargetMonth) {
+            monthMap[prodId] = (monthMap[prodId] || 0) + qty;
+          } else if (isBeforeTargetMonth) {
+            beforeMap[prodId] = (beforeMap[prodId] || 0) + qty;
+          }
         });
+      } else {
+        const prodId = extractProductId(vente);
+        if (!prodId) return;
+        const qty = Number(vente.quantite || 0);
+        if (isInTargetMonth) {
+          monthMap[prodId] = (monthMap[prodId] || 0) + qty;
+        } else if (isBeforeTargetMonth) {
+          beforeMap[prodId] = (beforeMap[prodId] || 0) + qty;
+        }
       }
     });
 
-    return map;
+    return { consumedBeforeMonth: beforeMap, consumedInMonth: monthMap };
   }, [ventesData, selectedMonth, selectedYear]);
 
-  // Entrées du mois par produit_id (modèle Approvisionnement : dateApprovisionnement & quantite)[cite: 11]
-  const entriesByProduct = useMemo(() => {
-    const map = {};
+  // Mouvements d'approvisionnements : avant le mois sélectionné vs pendant le mois sélectionné
+  const { entriesBeforeMonth, entriesInMonth } = useMemo(() => {
+    const beforeMap = {};
+    const monthMap = {};
     const targetMonth = parseInt(selectedMonth, 10);
     const targetYear = parseInt(selectedYear, 10);
+    const startOfTargetMonth = new Date(targetYear, targetMonth, 1).getTime();
 
     approvisionnementsData.forEach((app) => {
       const d = new Date(app.dateApprovisionnement || app.createdAt);
       if (isNaN(d.getTime())) return;
 
+      const prodId = extractProductId(app);
+      if (!prodId) return;
+      const qty = Number(app.quantite || 0);
+
       if (d.getMonth() === targetMonth && d.getFullYear() === targetYear) {
-        const prodId =
-          app.produit_id || app.produitId || app.id_produit || app.produit?.id;
-        if (!prodId) return;
-        map[prodId] = (map[prodId] || 0) + Number(app.quantite || 0);
+        monthMap[prodId] = (monthMap[prodId] || 0) + qty;
+      } else if (d.getTime() < startOfTargetMonth) {
+        beforeMap[prodId] = (beforeMap[prodId] || 0) + qty;
       }
     });
 
-    return map;
+    return { entriesBeforeMonth: beforeMap, entriesInMonth: monthMap };
   }, [approvisionnementsData, selectedMonth, selectedYear]);
 
-  // Construction des lignes du canevas alignées sur les modèles
+  // Construction des lignes du canevas
   const rows = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
 
@@ -162,10 +196,20 @@ export default function RapportCanevasSNIS() {
         return matchesCat && matchesSearch;
       })
       .map((product, index) => {
-        const consumed = consumedByProduct[product.id] || 0;
-        const autoEntry = entriesByProduct[product.id] || 0;
-        const currentStock = Number(product.quantite || 0);
+        const consumed = consumedInMonth[product.id] || 0;
+        const autoEntry = entriesInMonth[product.id] || 0;
+        const prevEntries = entriesBeforeMonth[product.id] || 0;
+        const prevConsumed = consumedBeforeMonth[product.id] || 0;
+
+        // Stock net calculé à l'entrée du mois sélectionné (0 si aucun mouvement avant)
+        const computedStockDebut = Math.max(0, prevEntries - prevConsumed);
+
         const adj = manualAdjustments[product.id] || {};
+
+        const stockDebutMois =
+          adj.stockDebut !== undefined && adj.stockDebut !== ""
+            ? Number(adj.stockDebut)
+            : computedStockDebut;
 
         const entreeMois =
           adj.entreeMois !== undefined && adj.entreeMois !== ""
@@ -180,22 +224,15 @@ export default function RapportCanevasSNIS() {
             ? Number(adj.ajustement)
             : 0;
 
+        const computedStockDispo = Math.max(
+          0,
+          stockDebutMois + entreeMois - consumed - perte + ajustement,
+        );
+
         const stockDisponibleUtilisable =
           adj.stockDispo !== undefined && adj.stockDispo !== ""
             ? Number(adj.stockDispo)
-            : currentStock;
-
-        const stockDebutMois =
-          adj.stockDebut !== undefined && adj.stockDebut !== ""
-            ? Number(adj.stockDebut)
-            : Math.max(
-                0,
-                stockDisponibleUtilisable +
-                  consumed +
-                  perte -
-                  entreeMois -
-                  ajustement,
-              );
+            : computedStockDispo;
 
         const joursRupture =
           adj.joursRupture !== undefined && adj.joursRupture !== ""
@@ -237,8 +274,10 @@ export default function RapportCanevasSNIS() {
       });
   }, [
     productsData,
-    consumedByProduct,
-    entriesByProduct,
+    consumedBeforeMonth,
+    consumedInMonth,
+    entriesBeforeMonth,
+    entriesInMonth,
     manualAdjustments,
     searchTerm,
     selectedCategory,
@@ -344,6 +383,7 @@ export default function RapportCanevasSNIS() {
                       {editable ? (
                         <input
                           type="number"
+                          min="0"
                           value={
                             adj.stockDebut !== undefined
                               ? adj.stockDebut
@@ -368,6 +408,7 @@ export default function RapportCanevasSNIS() {
                       {editable ? (
                         <input
                           type="number"
+                          min="0"
                           value={
                             adj.entreeMois !== undefined
                               ? adj.entreeMois
@@ -580,8 +621,8 @@ export default function RapportCanevasSNIS() {
             Canevas Mensuel — {moisLabel} {selectedYear}
           </span>
           <span className="text-[11px] text-slate-400">
-            Les entrées du mois sont calculées à partir des approvisionnements
-            et restent ajustables avant impression.
+            Stock calculé selon les mouvements de la période, modifiable avant
+            impression.
           </span>
         </div>
         {renderTableContent(true)}
